@@ -19,9 +19,9 @@ use rusk_abi::dusk::{dusk, Dusk};
 use rusk_abi::{ContractData, ContractId, Session, VM};
 use rusk_abi::{LICENSE_CONTRACT, STAKE_CONTRACT, TRANSFER_CONTRACT};
 use std::error::Error;
-use std::fs;
 use std::path::Path;
-use tracing::info;
+use std::{fs, io};
+use tracing::{error, info};
 use url::Url;
 
 pub use snapshot::{Balance, GenesisStake, Governance, Snapshot};
@@ -357,6 +357,8 @@ fn load_state<P: AsRef<Path>>(
     };
 
     tar::unarchive(&buffer, state_dir)?;
+    sanitize(state_dir, "a")?;
+    sanitize(state_dir, "m")?;
 
     let (vm, commit) = restore_state(state_dir)?;
     info!(
@@ -366,4 +368,34 @@ fn load_state<P: AsRef<Path>>(
     );
 
     Ok((vm, commit))
+}
+
+fn sanitize(dir: &Path, extension: &str) -> io::Result<()> {
+    let entries = fs::read_dir(dir)?;
+    let theme = Theme::default();
+
+    for entry in entries {
+        let path = entry?.path();
+
+        if path.is_file() {
+            if let Some(file_extension) = path.extension() {
+                if file_extension == extension {
+                    let filename = path.display();
+
+                    if let Err(err) = fs::remove_file(&path) {
+                        error!(
+                            "{} deleting {filename}: {err}",
+                            theme.error("Error"),
+                        );
+                    } else {
+                        info!("{} {filename}", theme.action("Deleted"),);
+                    }
+                }
+            }
+        } else if path.is_dir() {
+            sanitize(&path, extension)?;
+        }
+    }
+
+    Ok(())
 }
