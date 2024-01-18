@@ -19,6 +19,7 @@ use state::StakeState;
 pub const MINIMUM_STAKE: Dusk = dusk(1_000.0);
 
 use dusk_bls12_381_sign::PublicKey;
+use dusk_bytes::Serializable;
 use rusk_abi::{ContractId, PaymentInfo};
 
 #[no_mangle]
@@ -100,10 +101,17 @@ unsafe fn slash(arg_len: u32) -> u32 {
 /// Asserts the call is made via the transfer contract.
 ///
 /// # Panics
-/// When the `caller` is not [`rusk_abi::TRANSFER_CONTRACT`].
+/// When the `caller`s owner is not transfer contract's owner.
+/// Note: we can't use PublicKey here as
+/// PublicKey::from_bytes consumes ca. 3.57 million units of gas.
 fn assert_transfer_caller() {
-    if rusk_abi::caller() != rusk_abi::TRANSFER_CONTRACT {
-        panic!("Can only be called from the transfer contract");
+    let transfer_owner =
+        rusk_abi::owner::<{ PublicKey::SIZE }>(rusk_abi::TRANSFER_CONTRACT)
+            .unwrap();
+    let caller_id = rusk_abi::caller();
+    match rusk_abi::owner::<{ PublicKey::SIZE }>(caller_id) {
+        Some(caller_owner) if caller_owner.eq(&transfer_owner) => (),
+        _ => panic!("Can only be called from the transfer contract"),
     }
 }
 
