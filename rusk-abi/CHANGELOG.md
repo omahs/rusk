@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed owner to self_owner [#1235]
+
+### Added
+
+- Ids for data and logic transfer contracts [#1235]
+
 ## [0.11.0] - 2023-10-12
 
 ### Changed
@@ -187,6 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add LICENSE
 - Add README.md
 
+[#1235]: https://github.com/dusk-network/rusk/issues/1235
 [#945]: https://github.com/dusk-network/rusk/issues/945
 [#937]: https://github.com/dusk-network/rusk/issues/937
 [#874]: https://github.com/dusk-network/rusk/issues/874
