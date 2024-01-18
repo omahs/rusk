@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated piecrust-uplink dependency to 0.10.0-rc.0 [#1235] 
+- Updated piecrust dependency to 0.15.0-rc.0 [#1235]
 - Changed owner to self_owner [#1235]
 
 ### Added
