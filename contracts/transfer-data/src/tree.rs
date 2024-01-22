@@ -50,7 +50,11 @@ impl Tree {
         pos
     }
 
-    pub fn extend_notes(&mut self, block_height: u64, notes: Vec<Note>) {
+    pub fn extend_notes<I: IntoIterator<Item = Note>>(
+        &mut self,
+        block_height: u64,
+        notes: I,
+    ) {
         for note in notes {
             let leaf = TreeLeaf { block_height, note };
             self.push(leaf);
