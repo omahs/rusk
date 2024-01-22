@@ -221,8 +221,6 @@ unsafe fn sub_module_balance(arg_len: u32) -> u32 {
 ///
 /// # Panics
 /// When the `caller`s owner is not transfer contract's owner.
-/// Note: we can't use PublicKey here as
-/// PublicKey::from_bytes consumes ca. 3.57 million units of gas.
 fn assert_transfer_caller() {
     let transfer_owner =
         rusk_abi::owner::<{ PublicKey::SIZE }>(rusk_abi::TRANSFER_CONTRACT)
