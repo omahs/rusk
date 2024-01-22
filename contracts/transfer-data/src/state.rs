@@ -110,14 +110,11 @@ impl TransferState {
 
     /// Return the balance of a given contract.
     pub fn balance(&self, contract_id: &ContractId) -> u64 {
-        rusk_abi::debug!("==balance cur_value={:?}", self.balances.get(contract_id));
         self.balances.get(contract_id).copied().unwrap_or_default()
     }
 
     /// Add balance to the given contract
     pub fn add_balance(&mut self, contract: ContractId, value: u64) {
-        rusk_abi::debug!("==add_balance value={} cur_value={:?} addr={:#04x}{:#04x}", value, self.balances.get(&contract), contract.to_bytes()[0], contract.to_bytes()[1]);
-
         match self.balances.entry(contract) {
             Entry::Vacant(ve) => {
                 ve.insert(value);
@@ -127,7 +124,6 @@ impl TransferState {
                 *v += value
             }
         }
-        rusk_abi::debug!("==after add_balance cur_value={:?}", self.balances.get(&contract));
     }
 
     pub fn message(
@@ -178,8 +174,7 @@ impl TransferState {
         address: ContractId,
         value: u64,
     ) -> Option<()> {
-        rusk_abi::debug!("==sub_balance value={} cur_value={:?} addr={:#04x}{:#04x}", value, self.balances.get(&address), address.to_bytes()[0], address.to_bytes()[1]);
-        let x = match self.balances.get_mut(&address) {
+        match self.balances.get_mut(&address) {
             Some(balance) => {
                 let (bal, underflow) = balance.overflowing_sub(value);
                 if underflow {
@@ -191,9 +186,7 @@ impl TransferState {
                 }
             }
             _ => None,
-        };
-        rusk_abi::debug!("==after sub_balance cur_value={:?}", self.balances.get(&address));
-        x
+        }
     }
 
     pub fn push_message(
