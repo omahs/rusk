@@ -36,13 +36,10 @@ impl TransferOps {
     }
 
     pub fn mint(&mut self, mint: Mint) -> bool {
-        // Only the stake contract can mint notes to a particular stealth
-        // address. This happens when the reward for staking and participating
-        // in the consensus is withdrawn.
-        if rusk_abi::caller() != STAKE_CONTRACT
-            && !rusk_abi::caller().is_uninitialized()
-            && !Self::is_transfer_caller()
-        {
+        // Only the stake and transfer contracts can mint notes to a particular
+        // stealth address. This happens when the reward for staking and
+        // participating in the consensus is withdrawn.
+        if rusk_abi::caller() != STAKE_CONTRACT && !Self::is_transfer_caller() {
             panic!("Can only be called by the stake contract!")
         }
 

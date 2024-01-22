@@ -216,8 +216,7 @@ unsafe fn sub_module_balance(arg_len: u32) -> u32 {
     )
 }
 
-/// Asserts the call is made "from the outside", meaning that it's not an
-/// inter-contract call.
+/// Asserts the call is made via the transfer contract.
 ///
 /// # Panics
 /// When the `caller`s owner is not transfer contract's owner.
@@ -226,10 +225,6 @@ fn assert_transfer_caller() {
         rusk_abi::owner::<{ PublicKey::SIZE }>(rusk_abi::TRANSFER_CONTRACT)
             .unwrap();
     let caller_id = rusk_abi::caller();
-    if caller_id == ContractId::uninitialized() {
-        // todo: remove this if
-        return;
-    }
     match rusk_abi::owner::<{ PublicKey::SIZE }>(caller_id) {
         Some(caller_owner) if caller_owner.eq(&transfer_owner) => (),
         _ => panic!("Can only be called from the transfer contract"),
