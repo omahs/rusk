@@ -10,7 +10,7 @@ use crate::error::Error;
 use alloc::vec::Vec;
 
 use dusk_bls12_381::BlsScalar;
-use dusk_bytes::{DeserializableSlice, Serializable};
+use dusk_bytes::DeserializableSlice;
 use dusk_jubjub::{JubJubAffine, JubJubExtended};
 use dusk_pki::{Ownable, PublicKey, StealthAddress};
 use phoenix_core::transaction::*;
@@ -29,10 +29,9 @@ pub struct TransferOps;
 
 impl TransferOps {
     fn is_transfer_caller() -> bool {
-        let transfer_owner =
-            rusk_abi::owner::<{ PublicKey::SIZE }>(TRANSFER_CONTRACT).unwrap();
+        let transfer_owner = rusk_abi::owner_raw(TRANSFER_CONTRACT).unwrap();
         let caller_id = rusk_abi::caller();
-        matches!(rusk_abi::owner::<{ PublicKey::SIZE }>(caller_id), Some(caller_owner) if caller_owner.eq(&transfer_owner))
+        matches!(rusk_abi::owner_raw(caller_id), Some(caller_owner) if caller_owner.eq(&transfer_owner))
     }
 
     pub fn mint(&mut self, mint: Mint) -> bool {
@@ -40,7 +39,7 @@ impl TransferOps {
         // stealth address. This happens when the reward for staking and
         // participating in the consensus is withdrawn.
         if rusk_abi::caller() != STAKE_CONTRACT && !Self::is_transfer_caller() {
-            panic!("Can only be called by the stake contract!")
+            panic!("Can only be called by the stake and transfer contracts!")
         }
 
         let note =
