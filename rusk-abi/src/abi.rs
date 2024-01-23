@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#[cfg(feature = "abi")]
+use crate::OwnerRaw;
 pub use piecrust_uplink::*;
 
 /// Compute the blake2b hash of the given bytes, returning the resulting scalar.
@@ -69,4 +71,10 @@ pub fn payment_info(
     contract: ContractId,
 ) -> Result<crate::PaymentInfo, ContractError> {
     call(contract, "payment_info", &())
+}
+
+/// Query owner of a given contract.
+#[cfg(feature = "abi")]
+pub fn owner_raw(contract: ContractId) -> Option<OwnerRaw> {
+    owner(contract)
 }
