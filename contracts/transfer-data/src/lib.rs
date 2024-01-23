@@ -13,8 +13,6 @@ extern crate alloc;
 mod state;
 mod tree;
 
-use dusk_bytes::Serializable;
-use dusk_pki::PublicKey;
 use rusk_abi::ContractId;
 use state::TransferState;
 
@@ -219,10 +217,9 @@ unsafe fn get_module_balance(arg_len: u32) -> u32 {
 /// When the `caller`s owner is not transfer contract's owner.
 fn assert_transfer_caller() {
     let transfer_owner =
-        rusk_abi::owner::<{ PublicKey::SIZE }>(rusk_abi::TRANSFER_CONTRACT)
-            .unwrap();
+        rusk_abi::owner_raw(rusk_abi::TRANSFER_CONTRACT).unwrap();
     let caller_id = rusk_abi::caller();
-    match rusk_abi::owner::<{ PublicKey::SIZE }>(caller_id) {
+    match rusk_abi::owner_raw(caller_id) {
         Some(caller_owner) if caller_owner.eq(&transfer_owner) => (),
         _ => panic!("Can only be called from the transfer contract"),
     }
