@@ -11,7 +11,6 @@ use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 use dusk_pki::PublicSpendKey;
 
 use bytecheck::CheckBytes;
-use dusk_bytes::Serializable;
 use rkyv::{Archive, Deserialize, Serialize};
 
 pub(crate) enum Query {}
@@ -93,6 +92,3 @@ where
         t.clone().into()
     }
 }
-
-/// Raw form of an owner type
-pub type OwnerRaw = [u8; PublicSpendKey::SIZE];
