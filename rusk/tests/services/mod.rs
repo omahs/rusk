@@ -9,4 +9,6 @@ pub mod multi_transfer;
 pub mod stake;
 pub mod transfer;
 
+pub mod protected_internal;
+pub mod protected_proxy;
 pub mod unspendable;
