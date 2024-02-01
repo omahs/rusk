@@ -11,7 +11,7 @@ use dusk_pki::PublicKey;
 use phoenix_core::transaction::*;
 use phoenix_core::{Fee, Message, Note};
 use poseidon_merkle::Opening as PoseidonOpening;
-use rusk_abi::{ContractError, ContractId};
+use rusk_abi::{ContractError, ContractId, TRANSFER_LOGIC_CONTRACT};
 use transfer_contract_types::{Mint, Stct, Wfco, WfcoRaw, Wfct, Wfctc};
 
 /// Arity of the transfer tree.
@@ -127,6 +127,11 @@ impl TransferProxy {
         &mut self,
         tx: Transaction,
     ) -> Result<Vec<u8>, ContractError> {
+        if let Some((contract_id, _, _)) = tx.call {
+            if contract_id == TRANSFER_LOGIC_CONTRACT.to_bytes() {
+                panic!("Transfer contract can only be called from the transfer proxy contract");
+            }
+        }
         rusk_abi::call::<Transaction, Result<Vec<u8>, ContractError>>(
             self.target,
             "spend_and_execute",
