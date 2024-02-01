@@ -315,6 +315,12 @@ impl TransferOps {
         &mut self,
         tx: Transaction,
     ) -> Result<Vec<u8>, ContractError> {
+        if let Some((contract_id, _, _)) = tx.call {
+            if contract_id == TRANSFER_DATA_CONTRACT.to_bytes() {
+                panic!("Transfer data contract can only be called from the transfer contract");
+            }
+        }
+
         //  1. α ∈ R
         if !self.root_exists(&tx.anchor) {
             panic!("Anchor not found in the state!");
