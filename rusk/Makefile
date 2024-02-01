@@ -8,7 +8,7 @@ test: ## Run Rusk tests
 		-vvv \
 		--release \
 		-- --nocapture \
-		--test-threads 8
+		--test-threads 1
 			
 clippy: ## Run clippy
 	@cargo clippy --all-features --release -- -D warnings
