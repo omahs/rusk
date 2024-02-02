@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use dusk_bls12_381::BlsScalar;
@@ -129,7 +130,7 @@ impl TransferProxy {
     ) -> Result<Vec<u8>, ContractError> {
         if let Some((contract_id, _, _)) = tx.call {
             if contract_id == TRANSFER_LOGIC_CONTRACT.to_bytes() {
-                panic!("Transfer contract can only be called from the transfer proxy contract");
+                return Err(ContractError::Panic("Transfer contract can only be called from the transfer proxy contract".to_string()));
             }
         }
         rusk_abi::call::<Transaction, Result<Vec<u8>, ContractError>>(
