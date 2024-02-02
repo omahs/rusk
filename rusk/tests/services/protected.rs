@@ -19,7 +19,7 @@ use rusk_abi::{
 use tempfile::tempdir;
 
 use crate::common::logger;
-use crate::common::state::{generator_procedure, new_state, ExecuteResult};
+use crate::common::state::{generator_procedure, new_state};
 use crate::common::wallet::{TestProverClient, TestStateClient, TestStore};
 
 const BLOCK_HEIGHT: u64 = 1;
@@ -41,7 +41,6 @@ fn verify_protected_method(
     protected_method: &str,
     rusk: &Rusk,
     wallet: &wallet::Wallet<TestStore, TestStateClient, TestProverClient>,
-    should_discard: bool,
 ) {
     let mut rng = StdRng::seed_from_u64(0xcafe);
 
@@ -62,39 +61,24 @@ fn verify_protected_method(
         )
         .expect("Making the transaction should succeed");
 
-    let expected = if should_discard {
-        Some(ExecuteResult {
-            discarded: 1,
-            executed: 0,
-        })
-    } else {
-        None
-    };
-
     let spent_transactions = generator_procedure(
         rusk,
         &[tx],
         BLOCK_HEIGHT,
         BLOCK_GAS_LIMIT,
         vec![],
-        expected,
+        None,
     )
     .expect("generator procedure should succeed");
 
-    if !should_discard {
-        assert!(spent_transactions
-            .first()
-            .expect("Transaction should exist")
-            .err
-            .is_some());
-    }
+    assert!(spent_transactions
+        .first()
+        .expect("Transaction should exist")
+        .err
+        .is_some());
 }
 
-pub fn test_protected_method(
-    method: &str,
-    contract: ContractId,
-    should_discard: bool,
-) -> Result<()> {
+pub fn test_protected_method(method: &str, contract: ContractId) -> Result<()> {
     logger();
 
     let tmp = tempdir().expect("Should be able to create temporary directory");
@@ -111,7 +95,7 @@ pub fn test_protected_method(
         TestProverClient::default(),
     );
 
-    verify_protected_method(contract, method, &rusk, &wallet, should_discard);
+    verify_protected_method(contract, method, &rusk, &wallet);
 
     Ok(())
 }
@@ -175,23 +159,16 @@ const TRANSFER_PROXY_PROTECTED_METHODS: &'static [&'static str] = &[
     "add_module_balance",
 ];
 
-const SHOULD_DISCARD: bool = true;
-const SHOULD_NOT_DISCARD: bool = false; // meaning: should err
-
 #[tokio::test(flavor = "multi_thread")]
 pub async fn protected_transfer_methods() -> Result<()> {
     for method in TRANSFER_DATA_PROTECTED_METHODS {
-        test_protected_method(*method, TRANSFER_DATA_CONTRACT, SHOULD_DISCARD)?;
+        test_protected_method(*method, TRANSFER_DATA_CONTRACT)?;
     }
     for method in TRANSFER_LOGIC_PROTECTED_METHODS {
-        test_protected_method(
-            *method,
-            TRANSFER_LOGIC_CONTRACT,
-            SHOULD_DISCARD,
-        )?;
+        test_protected_method(*method, TRANSFER_LOGIC_CONTRACT)?;
     }
     for method in TRANSFER_PROXY_PROTECTED_METHODS {
-        test_protected_method(*method, TRANSFER_CONTRACT, SHOULD_NOT_DISCARD)?;
+        test_protected_method(*method, TRANSFER_CONTRACT)?;
     }
     Ok(())
 }
