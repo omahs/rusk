@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::alloc::string::ToString;
 use crate::circuits::*;
 use crate::error::Error;
 
@@ -315,12 +316,6 @@ impl TransferOps {
         &mut self,
         tx: Transaction,
     ) -> Result<Vec<u8>, ContractError> {
-        if let Some((contract_id, _, _)) = tx.call {
-            if contract_id == TRANSFER_DATA_CONTRACT.to_bytes() {
-                panic!("Transfer data contract can only be called from the transfer contract");
-            }
-        }
-
         //  1. α ∈ R
         if !self.root_exists(&tx.anchor) {
             panic!("Anchor not found in the state!");
@@ -377,6 +372,9 @@ impl TransferOps {
         let mut result = Ok(Vec::new());
 
         if let Some((contract_id, fn_name, fn_args)) = tx.call {
+            if contract_id == TRANSFER_DATA_CONTRACT.to_bytes() {
+                return Err(ContractError::Panic("Transfer data contract can only be called from the transfer contract".to_string()));
+            }
             result = rusk_abi::call_raw(
                 ContractId::from_bytes(contract_id),
                 &fn_name,
