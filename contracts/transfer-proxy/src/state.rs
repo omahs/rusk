@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use dusk_bls12_381::BlsScalar;
@@ -12,7 +11,7 @@ use dusk_pki::PublicKey;
 use phoenix_core::transaction::*;
 use phoenix_core::{Fee, Message, Note};
 use poseidon_merkle::Opening as PoseidonOpening;
-use rusk_abi::{ContractError, ContractId, TRANSFER_LOGIC_CONTRACT};
+use rusk_abi::{ContractError, ContractId};
 use transfer_contract_types::{Mint, Stct, Wfco, WfcoRaw, Wfct, Wfctc};
 
 /// Arity of the transfer tree.
@@ -128,17 +127,20 @@ impl TransferProxy {
         &mut self,
         tx: Transaction,
     ) -> Result<Vec<u8>, ContractError> {
-        if let Some((contract_id, _, _)) = tx.call {
-            if contract_id == TRANSFER_LOGIC_CONTRACT.to_bytes() {
-                return Err(ContractError::Panic("Transfer contract can only be called from the transfer proxy contract".to_string()));
-            }
-        }
         rusk_abi::call::<Transaction, Result<Vec<u8>, ContractError>>(
             self.target,
-            "spend_and_execute",
+            "spend",
             &tx,
         )
-        .expect("spend_and_execute call should succeed")
+        .expect("spend_and_execute call should succeed")?;
+        match rusk_abi::call::<Transaction, Result<Vec<u8>, ContractError>>(
+            self.target,
+            "execute",
+            &tx,
+        ) {
+            Ok(r) => r,
+            Err(e) => Err(e),
+        }
     }
 
     /// Refund the previously performed transaction, taking into account the
