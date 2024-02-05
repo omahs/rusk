@@ -159,10 +159,18 @@ unsafe fn leaves_from_pos(arg_len: u32) -> u32 {
 // "Management" transactions
 
 #[no_mangle]
-unsafe fn spend_and_execute(arg_len: u32) -> u32 {
+unsafe fn spend(arg_len: u32) -> u32 {
     rusk_abi::wrap_call(arg_len, |tx| {
         assert_transfer_caller();
-        STATE.spend_and_execute(tx)
+        STATE.spend(tx)
+    })
+}
+
+#[no_mangle]
+unsafe fn execute(arg_len: u32) -> u32 {
+    rusk_abi::wrap_call(arg_len, |tx| {
+        assert_transfer_caller();
+        STATE.execute(tx)
     })
 }
 

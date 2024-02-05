@@ -19,7 +19,7 @@ use phoenix_core::{Crossover, Fee, Message, Note};
 use poseidon_merkle::Opening as PoseidonOpening;
 use rusk_abi::{
     ContractError, ContractId, PaymentInfo, PublicInput, STAKE_CONTRACT,
-    TRANSFER_CONTRACT, TRANSFER_DATA_CONTRACT,
+    TRANSFER_CONTRACT, TRANSFER_DATA_CONTRACT, TRANSFER_LOGIC_CONTRACT,
 };
 use transfer_contract_types::{Mint, Stct, Wfco, WfcoRaw, Wfct, Wfctc};
 
@@ -295,8 +295,8 @@ impl TransferOps {
         true
     }
 
-    /// Spends the inputs and creates the given UTXO, and executes the contract
-    /// call if present. It performs all checks necessary to ensure the
+    /// Spends the inputs and creates the given UTXO.
+    /// It performs all checks necessary to ensure the
     /// transaction is valid - hash matches, anchor has been a root of the
     /// tree, proof checks out, etc...
     ///
@@ -312,10 +312,7 @@ impl TransferOps {
     /// change in state.
     ///
     /// [`refund`]: [`TransferState::refund`]
-    pub fn spend_and_execute(
-        &mut self,
-        tx: Transaction,
-    ) -> Result<Vec<u8>, ContractError> {
+    pub fn spend(&mut self, tx: Transaction) -> Result<Vec<u8>, ContractError> {
         //  1. α ∈ R
         if !self.root_exists(&tx.anchor) {
             panic!("Anchor not found in the state!");
@@ -369,11 +366,24 @@ impl TransferOps {
         )
         .expect("set_crossover call should succeed");
 
+        Ok(Vec::new())
+    }
+
+    /// Executes the contract call if present.
+    ///
+    /// This function guarantees that it will not panic.
+    pub fn execute(
+        &mut self,
+        tx: Transaction,
+    ) -> Result<Vec<u8>, ContractError> {
         let mut result = Ok(Vec::new());
 
         if let Some((contract_id, fn_name, fn_args)) = tx.call {
             if contract_id == TRANSFER_DATA_CONTRACT.to_bytes() {
                 return Err(ContractError::Panic("Transfer data contract can only be called from the transfer contract".to_string()));
+            }
+            if contract_id == TRANSFER_LOGIC_CONTRACT.to_bytes() {
+                return Err(ContractError::Panic("Transfer logic contract can only be called from the transfer contract".to_string()));
             }
             result = rusk_abi::call_raw(
                 ContractId::from_bytes(contract_id),
