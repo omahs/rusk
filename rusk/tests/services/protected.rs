@@ -35,6 +35,7 @@ fn initial_state<P: AsRef<Path>>(dir: P) -> Result<Rusk> {
 }
 
 const SENDER_INDEX: u64 = 0;
+const CALL_DATA: [u8; 1024] = [0u8; 1024];
 
 fn verify_protected_method(
     contract: ContractId,
@@ -53,7 +54,7 @@ fn verify_protected_method(
             &mut rng,
             contract.to_bytes().into(),
             String::from(protected_method),
-            (),
+            CALL_DATA,
             SENDER_INDEX,
             &refund,
             GAS_LIMIT,
