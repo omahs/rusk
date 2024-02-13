@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #![no_std]
-#![feature(core_intrinsics, alloc_error_handler)]
+#![feature(alloc_error_handler)]
 #![deny(clippy::all)]
 
 extern crate alloc;
@@ -69,7 +69,7 @@ impl HostFnTest {
     }
 
     pub fn owner(&self) -> [u8; PublicSpendKey::SIZE] {
-        rusk_abi::owner()
+        rusk_abi::self_owner()
     }
 }
 

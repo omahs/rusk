@@ -91,27 +91,35 @@ where
     bytes.len() as u32
 }
 
-fn host_hash(arg_buf: &mut [u8], arg_len: u32) -> u32 {
+fn host_hash(_: &mut Session, arg_buf: &mut [u8], arg_len: u32) -> u32 {
     wrap_host_query(arg_buf, arg_len, hash)
 }
 
-fn host_poseidon_hash(arg_buf: &mut [u8], arg_len: u32) -> u32 {
+fn host_poseidon_hash(
+    _: &mut Session,
+    arg_buf: &mut [u8],
+    arg_len: u32,
+) -> u32 {
     wrap_host_query(arg_buf, arg_len, poseidon_hash)
 }
 
-fn host_verify_proof(arg_buf: &mut [u8], arg_len: u32) -> u32 {
+fn host_verify_proof(_: &mut Session, arg_buf: &mut [u8], arg_len: u32) -> u32 {
     wrap_host_query(arg_buf, arg_len, |(vd, proof, pis)| {
         verify_proof(vd, proof, pis)
     })
 }
 
-fn host_verify_schnorr(arg_buf: &mut [u8], arg_len: u32) -> u32 {
+fn host_verify_schnorr(
+    _: &mut Session,
+    arg_buf: &mut [u8],
+    arg_len: u32,
+) -> u32 {
     wrap_host_query(arg_buf, arg_len, |(msg, pk, sig)| {
         verify_schnorr(msg, pk, sig)
     })
 }
 
-fn host_verify_bls(arg_buf: &mut [u8], arg_len: u32) -> u32 {
+fn host_verify_bls(_: &mut Session, arg_buf: &mut [u8], arg_len: u32) -> u32 {
     wrap_host_query(arg_buf, arg_len, |(msg, pk, sig)| verify_bls(msg, pk, sig))
 }
 
