@@ -10,11 +10,13 @@
 		last
 	} from "lamb";
 	import {
+		mdiContain,
 		mdiDatabaseOutline,
 		mdiSwapVertical
 	} from "@mdi/js";
 
 	import {
+		Icon,
 		Tabs
 	} from "$lib/dusk/components";
 	import {
@@ -67,6 +69,8 @@
 	}
 
 	const enabledContracts = getEnabledContracts(contractDescriptors);
+	const hasNoEnabledContracts = enabledContracts.length === 0;
+
 	const tabItems = enabledContracts.map(({ id, label }) => ({
 		icon: { path: id === "transfer" ? mdiSwapVertical : mdiDatabaseOutline },
 		id,
@@ -99,6 +103,22 @@
 		tokenCurrency="DUSK"
 		tokens={balance.value}
 	/>
+
+	{#if hasNoEnabledContracts}
+		<div class="no-contracts-pane">
+			<Icon path={mdiContain} size="large"/>
+			<h3>No Contracts Enabled</h3>
+			<p>It appears that no contracts are currently enabled.
+				To access the full range of functionalities, enabling contracts is essential.</p>
+			<h4>For Developers:</h4>
+			<p>If you're in the midst of development and have encountered this message,
+				it's possible that the necessary contract settings
+				have not been configured or activated as expected.</p>
+			<h4>Need Assistance?</h4>
+			<p>Our support team is ready to assist with any questions or
+				challenges you may encounter regarding contract configuration and activation.</p>
+		</div>
+	{/if}
 
 	{#if selectedContract}
 		<article class="tabs">
@@ -164,6 +184,32 @@
 			flex-direction: column;
 			padding: 1rem 1.375rem;
 			gap: var(--default-gap);
+		}
+	}
+
+	.no-contracts-pane {
+		display: flex;
+		flex-direction: column;
+		background-color: var(--surface-color);
+		padding: 1rem 1.375rem;
+		border-radius: var(--control-border-radius-size);
+
+		& h3 {
+			text-align: center;
+			margin-bottom: 1em;
+		}
+
+		& p:not(:last-child) {
+			margin-bottom: 1em;
+		}
+
+		h4 {
+			margin-bottom: .5em;
+		}
+
+		:global(.dusk-icon) {
+			align-self: center;
+			margin-bottom: .5rem;
 		}
 	}
 </style>
