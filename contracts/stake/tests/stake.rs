@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::sync::mpsc;
+use std::time::SystemTime;
 
 use dusk_bls12_381::BlsScalar;
 use dusk_bls12_381_sign::{PublicKey, SecretKey};
@@ -85,6 +86,64 @@ fn instantiate<Rng: RngCore + CryptoRng>(
         )
         .expect("Pushing genesis note should succeed");
 
+    update_root(&mut session).expect("Updating the root should succeed");
+
+    // sets the block height for all subsequent operations to 1
+    let base = session.commit().expect("Committing should succeed");
+
+    rusk_abi::new_session(vm, base, 1)
+        .expect("Instantiating new session should succeed")
+}
+
+fn instantiate2_begin(
+    vm: &VM,
+) -> Session {
+    let transfer_bytecode = include_bytes!(
+        "../../../target/wasm64-unknown-unknown/release/transfer_contract.wasm"
+    );
+    let stake_bytecode = include_bytes!(
+        "../../../target/wasm32-unknown-unknown/release/stake_contract.wasm"
+    );
+
+    let mut session = rusk_abi::new_genesis_session(vm);
+
+    session
+        .deploy(
+            transfer_bytecode,
+            ContractData::builder(OWNER).contract_id(TRANSFER_CONTRACT),
+            POINT_LIMIT,
+        )
+        .expect("Deploying the transfer contract should succeed");
+
+    session
+        .deploy(
+            stake_bytecode,
+            ContractData::builder(OWNER).contract_id(STAKE_CONTRACT),
+            POINT_LIMIT,
+        )
+        .expect("Deploying the stake contract should succeed");
+
+    session
+}
+
+fn push_note_to_contract<Rng: RngCore + CryptoRng>(rng: &mut Rng, psk: &PublicSpendKey, session: &mut Session) {
+    let genesis_note = Note::transparent(rng, psk, GENESIS_VALUE);
+
+    // push genesis note to the contract
+    session
+        .call::<_, Note>(
+            TRANSFER_CONTRACT,
+            "push_note",
+            &(0u64, genesis_note),
+            POINT_LIMIT,
+        )
+        .expect("Pushing genesis note should succeed");
+}
+
+fn instantiate2_finish(
+    vm: &VM,
+    mut session: Session
+) -> Session {
     update_root(&mut session).expect("Updating the root should succeed");
 
     // sets the block height for all subsequent operations to 1
@@ -815,4 +874,230 @@ fn stake_withdraw_unstake() {
     update_root(&mut session).expect("Updating the root should succeed");
 
     println!("UNSTAKE : {gas_spent} gas");
+}
+
+
+fn get_ssk_psk<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> (SecretSpendKey, PublicSpendKey) {
+    let ssk = SecretSpendKey::random(rng);
+    let _vk = ssk.view_key();
+    let psk = PublicSpendKey::from(&ssk);
+    (ssk, psk)
+}
+
+fn do_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, ssk: SecretSpendKey, psk: PublicSpendKey, mut session: &mut Session, gas_limit: u64, leave_index: usize) {
+    let sk = SecretKey::random(rng);
+    let pk = PublicKey::from(&sk);
+
+    let leaves = leaves_from_height(session, 0)
+        .expect("Getting leaves in the given range should succeed");
+
+    assert!(leaves.len() > leave_index, "There should be at least one note in the state");
+
+    let input_note = leaves[leave_index].note;
+    let input_value = input_note
+        .value(None)
+        .expect("The value should be transparent");
+    let input_blinder = input_note
+        .blinding_factor(None)
+        .expect("The blinder should be transparent");
+    let input_nullifier = input_note.gen_nullifier(&ssk);
+
+    let gas_price = LUX;
+
+    // Since we're transferring value to a contract, a crossover is needed. Here
+    // we transfer half of the input note to the stake contract, so the
+    // crossover value is `input_value/2`.
+    let crossover_value = input_value / 2;
+    let crossover_blinder = JubJubScalar::random(rng);
+
+    let (mut fee, crossover) =
+        Note::obfuscated(rng, &psk, crossover_value, crossover_blinder)
+            .try_into()
+            .expect("Getting a fee and a crossover should succeed");
+
+    fee.gas_limit = gas_limit;
+    fee.gas_price = gas_price;
+
+    // The change note should have the value of the input note, minus what is
+    // maximally spent.
+    let change_value = input_value - crossover_value - gas_price * gas_limit;
+    let change_blinder = JubJubScalar::random(rng);
+    let change_note = Note::obfuscated(rng, &psk, change_value, change_blinder);
+
+    // Prove the STCT circuit.
+    let stct_address = rusk_abi::contract_to_scalar(&STAKE_CONTRACT);
+    let stct_signature = SendToContractTransparentCircuit::sign(
+        rng,
+        &ssk,
+        &fee,
+        &crossover,
+        crossover_value,
+        &stct_address,
+    );
+
+    let stct_circuit = SendToContractTransparentCircuit::new(
+        &fee,
+        &crossover,
+        crossover_value,
+        crossover_blinder,
+        stct_address,
+        stct_signature,
+    );
+
+    let (prover, _) = prover_verifier("SendToContractTransparentCircuit");
+    let (stct_proof, _) = prover
+        .prove(rng, &stct_circuit)
+        .expect("Proving STCT circuit should succeed");
+
+    let stake_digest = stake_signature_message(0, crossover_value);
+    let sig = sk.sign(&pk, &stake_digest);
+
+    // Fashion a Stake struct
+    let stake = Stake {
+        public_key: pk,
+        signature: sig,
+        value: crossover_value,
+        proof: stct_proof.to_bytes().to_vec(),
+    };
+    let stake_bytes = rkyv::to_bytes::<_, 4096>(&stake)
+        .expect("Should serialize Stake correctly")
+        .to_vec();
+
+    let call = Some((
+        STAKE_CONTRACT.to_bytes(),
+        String::from("stake"),
+        stake_bytes,
+    ));
+
+    // Compose the circuit. In this case we're using one input and one output.
+    let mut execute_circuit = ExecuteCircuitOneTwo::new();
+
+    execute_circuit.set_fee_crossover(
+        &fee,
+        &crossover,
+        crossover_value,
+        crossover_blinder,
+    );
+
+    execute_circuit
+        .add_output_with_data(change_note, change_value, change_blinder)
+        .expect("appending output should succeed");
+
+    let input_opening = opening(&mut session, *input_note.pos())
+        .expect("Querying the opening for the given position should succeed")
+        .expect("An opening should exist for a note in the tree");
+
+    // Generate pk_r_p
+    let sk_r = ssk.sk_r(input_note.stealth_address());
+    let pk_r_p = GENERATOR_NUMS_EXTENDED * sk_r.as_ref();
+
+    // The transaction hash must be computed before signing
+    let anchor =
+        root(&mut session).expect("Getting the anchor should be successful");
+
+    let tx_hash_input_bytes = Transaction::hash_input_bytes_from_components(
+        &[input_nullifier],
+        &[change_note],
+        &anchor,
+        &fee,
+        &Some(crossover),
+        &call,
+    );
+    let tx_hash = rusk_abi::hash(tx_hash_input_bytes);
+
+    execute_circuit.set_tx_hash(tx_hash);
+
+    let circuit_input_signature =
+        CircuitInputSignature::sign(rng, &ssk, &input_note, tx_hash);
+    let circuit_input = CircuitInput::new(
+        input_opening,
+        input_note,
+        pk_r_p.into(),
+        input_value,
+        input_blinder,
+        input_nullifier,
+        circuit_input_signature,
+    );
+
+    execute_circuit
+        .add_input(circuit_input)
+        .expect("appending input should succeed");
+
+    let (prover_key, _) = prover_verifier("ExecuteCircuitOneTwo");
+    let (execute_proof, _) = prover_key
+        .prove(rng, &execute_circuit)
+        .expect("Proving should be successful");
+
+    let tx = Transaction {
+        anchor,
+        nullifiers: vec![input_nullifier],
+        outputs: vec![change_note],
+        fee,
+        crossover: Some(crossover),
+        proof: execute_proof.to_bytes().to_vec(),
+        call,
+    };
+
+    let receipt =
+        execute(&mut session, tx).expect("Executing TX should succeed");
+    let gas_spent = receipt.gas_spent;
+    receipt.data.expect("Executed TX should not error");
+    update_root(&mut session).expect("Updating the root should succeed");
+
+    println!("STAKE   : {} gas", gas_spent);
+}
+
+fn do_get_provisioners(session: &mut Session) -> Result<impl Iterator<Item = (PublicKey, StakeData)>> {
+    let (sender, receiver) = mpsc::channel();
+    session.feeder_call::<_, ()>(
+        STAKE_CONTRACT,
+        "stakes",
+        &(),
+        sender,
+    )?;
+    Ok(receiver.into_iter().map(|bytes| {
+        rkyv::from_bytes::<(PublicKey, StakeData)>(&bytes).expect(
+            "The contract should only return (pk, stake_data) tuples",
+        )
+    }))
+}
+
+#[test]
+fn provisioners_bench() -> Result<(), Error>{
+    const NUM_STAKES: usize = 600;
+    const STCT_FEE: u64 = dusk(1.0);
+
+    let rng = &mut StdRng::seed_from_u64(0xfeeb);
+
+    let vm = &mut rusk_abi::new_ephemeral_vm()
+        .expect("Creating ephemeral VM should work");
+
+    let mut session = instantiate2_begin(vm);
+
+    let mut ssk_psk_vec: Vec<(SecretSpendKey, PublicSpendKey)> = vec![];
+
+    for _ in 0..NUM_STAKES {
+        ssk_psk_vec.push(get_ssk_psk(rng))
+    }
+
+    for (_, psk) in ssk_psk_vec.iter() {
+        push_note_to_contract(rng, psk, &mut session);
+    }
+
+    let mut session = instantiate2_finish(&vm, session);
+
+    for (i, (ssk, psk)) in ssk_psk_vec.iter().enumerate() {
+        println!("staking {}", i);
+        do_stake(rng, *ssk, *psk, &mut session, STCT_FEE, i);
+    }
+
+    println!("starting get_provisioners");
+    let start = SystemTime::now();
+    for (_, stake_data) in do_get_provisioners(&mut session)? {
+        println!("provisioner={:?}", stake_data);
+    }
+    let stop = SystemTime::now();
+    println!("finished get_provisioners, elapsed time={:?}", stop.duration_since(start).expect("duration should work"));
+
+    Ok(())
 }
