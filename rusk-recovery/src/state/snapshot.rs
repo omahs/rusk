@@ -71,9 +71,16 @@ impl Snapshot {
     }
 
     /// Return the owner of the smart contract.
-    pub fn owner(&self) -> [u8; PublicSpendKey::SIZE] {
-        let dusk = Wrapper::from(*state::DUSK_KEY);
-        self.owner.as_ref().unwrap_or(&dusk).to_bytes()
+    pub fn owner(&self) -> [u8; rusk_abi::OWNER_SIZE] {
+        let dusk =
+            Wrapper::<_, { PublicSpendKey::SIZE }>::from(*state::DUSK_KEY);
+
+        let mut bytes = [0u8; rusk_abi::OWNER_SIZE];
+        let serialized = rkyv::to_bytes::<_, 16>(&*dusk)
+            .expect("Serializing public spend key should succeed");
+
+        bytes.copy_from_slice(&serialized);
+        bytes
     }
 
     pub fn base_state(&self) -> Option<&str> {
