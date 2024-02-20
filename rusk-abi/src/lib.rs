@@ -56,6 +56,9 @@ pub const STAKE_CONTRACT: ContractId = reserved(0x2);
 /// ID of the genesis license contract
 pub const LICENSE_CONTRACT: ContractId = reserved(0x3);
 
+/// The size of a serialized owner
+pub const OWNER_SIZE: usize = 320;
+
 #[inline]
 const fn reserved(b: u8) -> ContractId {
     let mut bytes = [0u8; CONTRACT_ID_BYTES];

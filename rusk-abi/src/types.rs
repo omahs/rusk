@@ -8,7 +8,6 @@
 
 use dusk_bls12_381::BlsScalar;
 use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
-use dusk_pki::PublicSpendKey;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -27,19 +26,6 @@ pub(crate) enum Metadata {}
 
 impl Metadata {
     pub const BLOCK_HEIGHT: &'static str = "block_height";
-}
-
-/// Enum representing all possible payment configurations.
-#[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-#[repr(C)]
-pub enum PaymentInfo {
-    /// Only transparent notes are accepted.
-    Transparent(Option<PublicSpendKey>),
-    /// Only obfuscated notes are accepted.
-    Obfuscated(Option<PublicSpendKey>),
-    /// Any type of note is accepted.
-    Any(Option<PublicSpendKey>),
 }
 
 /// Enum that represents all possible types of public inputs

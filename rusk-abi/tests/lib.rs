@@ -336,10 +336,10 @@ fn owner() {
         rusk_abi::new_ephemeral_vm().expect("Instantiating VM should succeed");
     let (mut session, contract_id) = instantiate(&vm, 0);
 
-    let owner: [u8; 64] = session
+    let owner: PublicSpendKey = session
         .call(contract_id, "contract_owner", get_owner(), POINT_LIMIT)
         .expect("Query should succeed")
         .data;
 
-    assert_eq!(owner, get_owner().to_bytes());
+    assert_eq!(&owner, get_owner());
 }

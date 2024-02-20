@@ -6,6 +6,25 @@
 
 pub use piecrust_uplink::*;
 
+/// Returns the owner of the given contract, if it exists.
+#[cfg(feature = "abi")]
+pub fn owner(contract: ContractId) -> Option<dusk_pki::PublicSpendKey> {
+    use crate::OWNER_SIZE;
+    piecrust_uplink::owner::<OWNER_SIZE>(contract).map(|bytes| unsafe {
+        rkyv::from_bytes_unchecked(&bytes).expect("Invalid public spend key")
+    })
+}
+
+/// Returns the owner of the current contract.
+#[cfg(feature = "abi")]
+pub fn self_owner() -> dusk_pki::PublicSpendKey {
+    use crate::OWNER_SIZE;
+    unsafe {
+        let bytes = piecrust_uplink::self_owner::<OWNER_SIZE>();
+        rkyv::from_bytes_unchecked(&bytes).expect("Invalid public spend key")
+    }
+}
+
 /// Compute the blake2b hash of the given bytes, returning the resulting scalar.
 /// The output of the hasher is truncated (last nibble) to fit onto a scalar.
 #[cfg(feature = "abi")]
@@ -61,12 +80,4 @@ pub fn verify_bls(
 pub fn block_height() -> u64 {
     use crate::Metadata;
     meta_data(Metadata::BLOCK_HEIGHT).unwrap()
-}
-
-/// Query a contract for the types of payment it accepts.
-#[cfg(feature = "abi")]
-pub fn payment_info(
-    contract: ContractId,
-) -> Result<crate::PaymentInfo, ContractError> {
-    call(contract, "payment_info", &())
 }

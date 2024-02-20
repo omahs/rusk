@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #![no_std]
-#![feature(core_intrinsics, alloc_error_handler)]
+#![feature(alloc_error_handler)]
 #![deny(clippy::all)]
 
 extern crate alloc;
@@ -15,10 +15,9 @@ use dusk_bls12_381::BlsScalar;
 use dusk_bls12_381_sign::{
     PublicKey as BlsPublicKey, Signature as BlsSignature,
 };
-use dusk_bytes::Serializable;
 use dusk_pki::{PublicKey, PublicSpendKey};
 use dusk_schnorr::Signature;
-use rusk_abi::{ContractId, PaymentInfo, PublicInput};
+use rusk_abi::{ContractId, PublicInput};
 
 #[no_mangle]
 static SELF_ID: ContractId = ContractId::uninitialized();
@@ -68,7 +67,7 @@ impl HostFnTest {
         rusk_abi::block_height()
     }
 
-    pub fn owner(&self) -> [u8; PublicSpendKey::SIZE] {
+    pub fn owner(&self) -> PublicSpendKey {
         rusk_abi::self_owner()
     }
 }
@@ -112,11 +111,4 @@ unsafe fn block_height(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn contract_owner(arg_len: u32) -> u32 {
     rusk_abi::wrap_call(arg_len, |_: ()| STATE.owner())
-}
-
-const PAYMENT_INFO: PaymentInfo = PaymentInfo::Transparent(None);
-
-#[no_mangle]
-fn payment_info(arg_len: u32) -> u32 {
-    rusk_abi::wrap_call(arg_len, |_: ()| PAYMENT_INFO)
 }

@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update `piecrust` from `0.15` to `0.16`
 - Update `piecrust-uplink` from `0.10` to `0.11`
 
+### Removed
+
+- Remove `PaymentInfo` requirement for contracts
+
 ## [0.11.0] - 2023-10-12
 
 ### Changed
