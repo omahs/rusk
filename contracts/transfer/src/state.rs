@@ -14,14 +14,12 @@ use alloc::vec::Vec;
 
 use dusk_bls12_381::BlsScalar;
 use dusk_bytes::{DeserializableSlice, Serializable};
-use dusk_jubjub::{JubJubAffine, JubJubExtended};
+use dusk_jubjub::JubJubAffine;
 use dusk_pki::{Ownable, PublicKey, StealthAddress};
 use phoenix_core::transaction::*;
 use phoenix_core::{Crossover, Fee, Message, Note};
 use poseidon_merkle::Opening as PoseidonOpening;
-use rusk_abi::{
-    ContractError, ContractId, PaymentInfo, PublicInput, STAKE_CONTRACT,
-};
+use rusk_abi::{ContractError, ContractId, PublicInput, STAKE_CONTRACT};
 use transfer_contract_types::{Mint, Stct, Wfco, WfcoRaw, Wfct, Wfctc};
 
 /// Arity of the transfer tree.
@@ -95,13 +93,6 @@ impl TransferState {
         self.add_balance(contract_id, stct.value);
 
         //  3. if a.isPayable() ↦ true then continue
-        let contract_id = ContractId::from_bytes(stct.module);
-        match rusk_abi::payment_info(contract_id)
-            .expect("Querying the payment info should succeed")
-        {
-            PaymentInfo::Transparent(_) | PaymentInfo::Any(_) => (),
-            _ => panic!("The caller doesn't accept transparent notes"),
-        }
 
         //  4. verify(C.c, v, π)
         let vd = verifier_data_stct();
@@ -164,19 +155,11 @@ impl TransferState {
             stco_signature_message(&crossover, &stco.message, module).to_vec();
         let sign_message = rusk_abi::poseidon_hash(sign_message);
 
-        let (message_psk_a, message_psk_b) =
-            match rusk_abi::payment_info(contract_id)
-                .expect("Querying the payment info should succeed")
-            {
-                PaymentInfo::Obfuscated(Some(k))
-                | PaymentInfo::Any(Some(k)) => (*k.A(), *k.B()),
-
-                PaymentInfo::Obfuscated(None) | PaymentInfo::Any(None) => {
-                    (JubJubExtended::identity(), JubJubExtended::identity())
-                }
-
-                _ => panic!("The caller doesn't accept obfuscated notes"),
-            };
+        let (message_psk_a, message_psk_b) = match rusk_abi::owner(contract_id)
+        {
+            Some(k) => (*k.A(), *k.B()),
+            None => panic!("The contract doesn't have an owner"),
+        };
 
         let mut pi = Vec::with_capacity(12 + stco.message.cipher().len());
 
@@ -212,18 +195,9 @@ impl TransferState {
     pub fn withdraw_from_contract_obfuscated(&mut self, wfco: Wfco) -> bool {
         let address = rusk_abi::caller();
 
-        let (change_psk_a, change_psk_b) = match rusk_abi::payment_info(address)
-            .expect("Querying the payment info should succeed")
-        {
-            PaymentInfo::Obfuscated(Some(k)) | PaymentInfo::Any(Some(k)) => {
-                (*k.A(), *k.B())
-            }
-
-            PaymentInfo::Obfuscated(None) | PaymentInfo::Any(None) => {
-                (JubJubExtended::identity(), JubJubExtended::identity())
-            }
-
-            _ => panic!("The caller doesn't accept obfuscated notes"),
+        let (change_psk_a, change_psk_b) = match rusk_abi::owner(address) {
+            Some(k) => (*k.A(), *k.B()),
+            None => panic!("The contract doesn't have an owner"),
         };
 
         let mut pi = alloc::vec![
@@ -249,15 +223,6 @@ impl TransferState {
         );
 
         self.push_message(address, wfco.change_address, wfco.change);
-
-        //  6. if a.isPayable() → true, obf, psk_a? then continue
-        match rusk_abi::payment_info(address)
-            .expect("Querying the payment info should succeed")
-        {
-            PaymentInfo::Obfuscated(_) | PaymentInfo::Any(_) => (),
-            _ => panic!("This contract accepts only obfuscated notes!"),
-        }
-
         self.push_note_current_height(wfco.output);
 
         //  7. verify(c, M_c, No.c, π)
