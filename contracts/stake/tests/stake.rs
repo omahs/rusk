@@ -95,9 +95,7 @@ fn instantiate<Rng: RngCore + CryptoRng>(
         .expect("Instantiating new session should succeed")
 }
 
-fn instantiate2_begin(
-    vm: &VM,
-) -> Session {
+fn instantiate2_begin(vm: &VM) -> Session {
     let transfer_bytecode = include_bytes!(
         "../../../target/wasm64-unknown-unknown/release/transfer_contract.wasm"
     );
@@ -126,7 +124,11 @@ fn instantiate2_begin(
     session
 }
 
-fn push_note_to_contract<Rng: RngCore + CryptoRng>(rng: &mut Rng, psk: &PublicSpendKey, session: &mut Session) {
+fn push_note_to_contract<Rng: RngCore + CryptoRng>(
+    rng: &mut Rng,
+    psk: &PublicSpendKey,
+    session: &mut Session,
+) {
     let genesis_note = Note::transparent(rng, psk, GENESIS_VALUE);
 
     // push genesis note to the contract
@@ -140,10 +142,7 @@ fn push_note_to_contract<Rng: RngCore + CryptoRng>(rng: &mut Rng, psk: &PublicSp
         .expect("Pushing genesis note should succeed");
 }
 
-fn instantiate2_finish(
-    vm: &VM,
-    mut session: Session
-) -> Session {
+fn instantiate2_finish(vm: &VM, mut session: Session) -> Session {
     update_root(&mut session).expect("Updating the root should succeed");
 
     // sets the block height for all subsequent operations to 1
@@ -876,22 +875,33 @@ fn stake_withdraw_unstake() {
     println!("UNSTAKE : {gas_spent} gas");
 }
 
-
-fn get_ssk_psk<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> (SecretSpendKey, PublicSpendKey) {
+fn get_ssk_psk<Rng: RngCore + CryptoRng>(
+    rng: &mut Rng,
+) -> (SecretSpendKey, PublicSpendKey) {
     let ssk = SecretSpendKey::random(rng);
     let _vk = ssk.view_key();
     let psk = PublicSpendKey::from(&ssk);
     (ssk, psk)
 }
 
-fn do_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, ssk: SecretSpendKey, psk: PublicSpendKey, mut session: &mut Session, gas_limit: u64, leave_index: usize) {
+fn do_stake<Rng: RngCore + CryptoRng>(
+    rng: &mut Rng,
+    ssk: SecretSpendKey,
+    psk: PublicSpendKey,
+    mut session: &mut Session,
+    gas_limit: u64,
+    leave_index: usize,
+) {
     let sk = SecretKey::random(rng);
     let pk = PublicKey::from(&sk);
 
     let leaves = leaves_from_height(session, 0)
         .expect("Getting leaves in the given range should succeed");
 
-    assert!(leaves.len() > leave_index, "There should be at least as many notes as the index");
+    assert!(
+        leaves.len() > leave_index,
+        "There should be at least as many notes as the index"
+    );
 
     let input_note = leaves[leave_index].note;
     let input_value = input_note
@@ -1047,28 +1057,27 @@ fn do_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, ssk: SecretSpendKey, psk: P
     println!("STAKE   : {} gas", gas_spent);
 }
 
-fn do_get_provisioners(session: &mut Session) -> Result<impl Iterator<Item = (PublicKey, StakeData)>> {
+fn do_get_provisioners(
+    session: &mut Session,
+) -> Result<impl Iterator<Item = (PublicKey, StakeData)>> {
     let (sender, receiver) = mpsc::channel();
-    let r = session.feeder_call::<_, ()>(
-        STAKE_CONTRACT,
-        "stakes",
-        &(),
-        sender,
-    );
+    let r = session.feeder_call::<_, ()>(STAKE_CONTRACT, "stakes", &(), sender);
     println!("r={:?}", r);
     r?;
     Ok(receiver.into_iter().map(|bytes| {
-        rkyv::from_bytes::<(PublicKey, StakeData)>(&bytes).expect(
-            "The contract should only return (pk, stake_data) tuples",
-        )
+        rkyv::from_bytes::<(PublicKey, StakeData)>(&bytes)
+            .expect("The contract should only return (pk, stake_data) tuples")
     }))
 }
 
-fn do_insert_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, session: &mut Session) -> Result<()>{
+fn do_insert_stake<Rng: RngCore + CryptoRng>(
+    rng: &mut Rng,
+    session: &mut Session,
+) -> Result<()> {
     let stake_data = StakeData {
         amount: Some((500000000000000u64, 0)),
         counter: 1,
-        reward: 0
+        reward: 0,
     };
     let sk = SecretKey::random(rng);
     let pk = PublicKey::from(&sk);
@@ -1076,14 +1085,14 @@ fn do_insert_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, session: &mut Sessio
         STAKE_CONTRACT,
         "insert_stake",
         &(pk, stake_data),
-        POINT_LIMIT
+        POINT_LIMIT,
     )?;
     // update_root(session).expect("Updating the root should succeed");
     Ok(())
 }
 
 #[test]
-fn provisioners_bench() -> Result<(), Error>{
+fn provisioners_bench() -> Result<(), Error> {
     const NUM_STAKES: usize = 1000;
 
     let rng = &mut StdRng::seed_from_u64(0xfeeb);
@@ -1107,7 +1116,10 @@ fn provisioners_bench() -> Result<(), Error>{
     }
     println!();
     let stop = SystemTime::now();
-    println!("finished get_provisioners, elapsed time={:?}", stop.duration_since(start).expect("duration should work"));
+    println!(
+        "finished get_provisioners, elapsed time={:?}",
+        stop.duration_since(start).expect("duration should work")
+    );
 
     Ok(())
 }
