@@ -891,7 +891,7 @@ fn do_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, ssk: SecretSpendKey, psk: P
     let leaves = leaves_from_height(session, 0)
         .expect("Getting leaves in the given range should succeed");
 
-    assert!(leaves.len() > leave_index, "There should be at least one note in the state");
+    assert!(leaves.len() > leave_index, "There should be at least as many notes as the index");
 
     let input_note = leaves[leave_index].note;
     let input_value = input_note
@@ -1049,12 +1049,14 @@ fn do_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, ssk: SecretSpendKey, psk: P
 
 fn do_get_provisioners(session: &mut Session) -> Result<impl Iterator<Item = (PublicKey, StakeData)>> {
     let (sender, receiver) = mpsc::channel();
-    session.feeder_call::<_, ()>(
+    let r = session.feeder_call::<_, ()>(
         STAKE_CONTRACT,
         "stakes",
         &(),
         sender,
-    )?;
+    );
+    println!("r={:?}", r);
+    r?;
     Ok(receiver.into_iter().map(|bytes| {
         rkyv::from_bytes::<(PublicKey, StakeData)>(&bytes).expect(
             "The contract should only return (pk, stake_data) tuples",
@@ -1062,40 +1064,48 @@ fn do_get_provisioners(session: &mut Session) -> Result<impl Iterator<Item = (Pu
     }))
 }
 
+fn do_insert_stake<Rng: RngCore + CryptoRng>(rng: &mut Rng, session: &mut Session) -> Result<()>{
+    let stake_data = StakeData {
+        amount: Some((500000000000000u64, 0)),
+        counter: 1,
+        reward: 0
+    };
+    let sk = SecretKey::random(rng);
+    let pk = PublicKey::from(&sk);
+    session.call::<_, ()>(
+        STAKE_CONTRACT,
+        "insert_stake",
+        &(pk, stake_data),
+        POINT_LIMIT
+    )?;
+    // update_root(session).expect("Updating the root should succeed");
+    Ok(())
+}
+
 #[test]
 fn provisioners_bench() -> Result<(), Error>{
-    const NUM_STAKES: usize = 600;
-    const STCT_FEE: u64 = dusk(1.0);
+    const NUM_STAKES: usize = 1000;
 
     let rng = &mut StdRng::seed_from_u64(0xfeeb);
 
     let vm = &mut rusk_abi::new_ephemeral_vm()
         .expect("Creating ephemeral VM should work");
 
-    let mut session = instantiate2_begin(vm);
-
-    let mut ssk_psk_vec: Vec<(SecretSpendKey, PublicSpendKey)> = vec![];
-
-    for _ in 0..NUM_STAKES {
-        ssk_psk_vec.push(get_ssk_psk(rng))
-    }
-
-    for (_, psk) in ssk_psk_vec.iter() {
-        push_note_to_contract(rng, psk, &mut session);
-    }
-
+    let session = instantiate2_begin(vm);
     let mut session = instantiate2_finish(&vm, session);
 
-    for (i, (ssk, psk)) in ssk_psk_vec.iter().enumerate() {
+    for i in 0..NUM_STAKES {
         println!("staking {}", i);
-        do_stake(rng, *ssk, *psk, &mut session, STCT_FEE, i);
+        do_insert_stake(rng, &mut session)?;
     }
 
     println!("starting get_provisioners");
     let start = SystemTime::now();
-    for (_, stake_data) in do_get_provisioners(&mut session)? {
-        println!("provisioner={:?}", stake_data);
+    println!();
+    for (_pk, _stake_data) in do_get_provisioners(&mut session)? {
+        print!(".");
     }
+    println!();
     let stop = SystemTime::now();
     println!("finished get_provisioners, elapsed time={:?}", stop.duration_since(start).expect("duration should work"));
 
