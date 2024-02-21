@@ -39,10 +39,7 @@ pub trait VMExecution: Send + Sync + 'static {
         blk: &Block,
     ) -> anyhow::Result<(Vec<SpentTransaction>, VerificationOutput)>;
 
-    fn migrate(
-        &self,
-        block_height: u64,
-    ) -> anyhow::Result<()>;
+    fn migrate(&self, block_height: u64) -> anyhow::Result<()>;
 
     fn preverify(&self, tx: &Transaction) -> anyhow::Result<()>;
 

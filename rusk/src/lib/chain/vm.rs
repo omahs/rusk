@@ -6,17 +6,17 @@
 
 mod query;
 
-use std::sync::mpsc;
 use dusk_bls12_381_sign::PublicKey;
+use std::sync::mpsc;
 use tracing::info;
 
 use dusk_bytes::DeserializableSlice;
-use phoenix_core::transaction::StakeData;
 use dusk_consensus::operations::{CallParams, VerificationOutput};
 use dusk_consensus::user::provisioners::Provisioners;
 use dusk_consensus::user::stake::Stake;
 use node::vm::VMExecution;
 use node_data::ledger::{Block, SpentTransaction, Transaction};
+use phoenix_core::transaction::StakeData;
 use rusk_abi::{ContractData, ContractId, Session, STAKE_CONTRACT};
 
 use super::{Rusk, MINIMUM_STAKE};
@@ -130,11 +130,12 @@ impl VMExecution for Rusk {
         Ok((txs, state_root))
     }
 
-    fn migrate(&self, block_height: u64) -> anyhow::Result<()>{
+    fn migrate(&self, block_height: u64) -> anyhow::Result<()> {
         const MIGRATION_BLOCK: u64 = 3;
         const GAS_LIMIT: u64 = 1000_000_000;
-        const OWNER: [u8; 32] = [0u8; 32]; // todo !!! get owner from the old contract or find out what it is for stake
-        let new_stake_contract_bytecode = include_bytes!("../../assets/stake_contract.wasm");
+        const OWNER: [u8; 32] = [0u8; 32]; // todo !!! get owner from the old contract
+        let new_stake_contract_bytecode =
+            include_bytes!("../../assets/stake_contract.wasm");
         if block_height == MIGRATION_BLOCK {
             info!("MIGRATING STAKE CONTRACT");
             let inner = self.inner.lock();
@@ -147,9 +148,15 @@ impl VMExecution for Rusk {
                 ContractData::builder(OWNER),
                 GAS_LIMIT,
                 |new_contract, session| {
-                    for (pk, stake_data) in do_get_provisioners(STAKE_CONTRACT, session)? {
-                        session
-                            .call::<_, ()>(new_contract, "insert_stake", &(pk, stake_data), GAS_LIMIT)?;
+                    for (pk, stake_data) in
+                        do_get_provisioners(STAKE_CONTRACT, session)?
+                    {
+                        session.call::<_, ()>(
+                            new_contract,
+                            "insert_stake",
+                            &(pk, stake_data),
+                            GAS_LIMIT,
+                        )?;
                     }
                     Ok(())
                 },
