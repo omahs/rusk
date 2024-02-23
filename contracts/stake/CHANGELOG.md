@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added benchmark for get_provisioners [#1447]
+
 ### Changed
 
 - Improved performance of get_provisioners [#1447]
