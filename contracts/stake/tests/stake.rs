@@ -1061,9 +1061,7 @@ fn do_get_provisioners(
     session: &mut Session,
 ) -> Result<impl Iterator<Item = (PublicKey, StakeData)>> {
     let (sender, receiver) = mpsc::channel();
-    let r = session.feeder_call::<_, ()>(STAKE_CONTRACT, "stakes", &(), sender);
-    println!("r={:?}", r);
-    r?;
+    session.feeder_call::<_, ()>(STAKE_CONTRACT, "stakes", &(), sender)?;
     Ok(receiver.into_iter().map(|bytes| {
         rkyv::from_bytes::<(PublicKey, StakeData)>(&bytes)
             .expect("The contract should only return (pk, stake_data) tuples")
@@ -1074,8 +1072,9 @@ fn do_insert_stake<Rng: RngCore + CryptoRng>(
     rng: &mut Rng,
     session: &mut Session,
 ) -> Result<()> {
+    const TEST_STAKE: u64 = 500_000_000_000_000;
     let stake_data = StakeData {
-        amount: Some((500000000000000u64, 0)),
+        amount: Some((TEST_STAKE, 0)),
         counter: 1,
         reward: 0,
     };
@@ -1087,34 +1086,30 @@ fn do_insert_stake<Rng: RngCore + CryptoRng>(
         &(pk, stake_data),
         POINT_LIMIT,
     )?;
-    // update_root(session).expect("Updating the root should succeed");
     Ok(())
 }
 
 #[test]
-fn provisioners_bench() -> Result<(), Error> {
-    const NUM_STAKES: usize = 1000;
+fn get_provisioners_bench() -> Result<(), Error> {
+    const NUM_STAKES: usize = 600;
 
     let rng = &mut StdRng::seed_from_u64(0xfeeb);
 
     let vm = &mut rusk_abi::new_ephemeral_vm()
         .expect("Creating ephemeral VM should work");
 
-    let session = instantiate2_begin(vm);
-    let mut session = instantiate2_finish(&vm, session);
+    let ssk = SecretSpendKey::random(rng);
+    let psk = PublicSpendKey::from(&ssk);
+    let mut session = instantiate(rng, vm, &psk);
 
     for i in 0..NUM_STAKES {
-        println!("staking {}", i);
         do_insert_stake(rng, &mut session)?;
     }
 
-    println!("starting get_provisioners");
     let start = SystemTime::now();
-    println!();
-    for (_pk, _stake_data) in do_get_provisioners(&mut session)? {
-        print!(".");
+    for (_pk, stake_data) in do_get_provisioners(&mut session)? {
+        println!("{:?}", stake_data.amount);
     }
-    println!();
     let stop = SystemTime::now();
     println!(
         "finished get_provisioners, elapsed time={:?}",
