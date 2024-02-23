@@ -260,10 +260,8 @@ impl StakeState {
 
     /// Feeds the host with the stakes.
     pub fn stakes(&self) {
-        for (_k, v) in self.stakes.iter() {
-            let pk = v.1;
-            let stake_data = v.0.clone();
-            rusk_abi::feed((pk, stake_data));
+        for (_k, (stake_data, pk)) in self.stakes.iter() {
+            rusk_abi::feed((*pk, stake_data.clone()));
         }
     }
 }
