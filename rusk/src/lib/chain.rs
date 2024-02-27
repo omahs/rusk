@@ -29,6 +29,7 @@ pub struct RuskInner {
 pub struct Rusk {
     inner: Arc<Mutex<RuskInner>>,
     dir: PathBuf,
+    migration_height: Option<u64>,
 }
 
 #[derive(Clone)]
