@@ -31,6 +31,8 @@ pub struct StakeState {
     slashed_amount: u64,
 }
 
+const STAKE_CONTRACT_VERSION: u64 = 1;
+
 impl StakeState {
     pub const fn new() -> Self {
         Self {
@@ -197,6 +199,11 @@ impl StakeState {
     /// Total amount slashed from the genesis
     pub fn slashed_amount(&self) -> u64 {
         self.slashed_amount
+    }
+
+    /// Version of the stake contract
+    pub fn get_version(&self) -> u64 {
+        STAKE_CONTRACT_VERSION
     }
 
     /// Slash the given `to_slash` amount from a `public_key` reward

@@ -64,6 +64,11 @@ unsafe fn slashed_amount(arg_len: u32) -> u32 {
     rusk_abi::wrap_call(arg_len, |_: ()| STATE.slashed_amount())
 }
 
+#[no_mangle]
+unsafe fn get_version(arg_len: u32) -> u32 {
+    rusk_abi::wrap_call(arg_len, |_: ()| STATE.get_version())
+}
+
 // "Feeder" queries
 
 #[no_mangle]

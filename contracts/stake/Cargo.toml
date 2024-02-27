@@ -35,4 +35,3 @@ criterion = "0.4"
 [[bench]]
 name = "get_provisioners"
 harness = false
-
