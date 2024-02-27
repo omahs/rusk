@@ -265,6 +265,11 @@ impl StakeState {
         }
     }
 
+    /// Sets the slashed amount
+    pub fn set_slashed_amount(&mut self, amount: u64) {
+        self.slashed_amount = amount;
+    }
+
     /// Feeds the host with the stakes.
     pub fn stakes(&self) {
         for (stake_data, pk) in self.stakes.values() {
