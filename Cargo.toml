@@ -8,7 +8,6 @@ members = [
     "contracts/alice",
     "contracts/bob",
     "contracts/stake",
-    "contracts/stake-v2",
     "contracts/stake-types",
     "contracts/governance",
     "contracts/transfer",
