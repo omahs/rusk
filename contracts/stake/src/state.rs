@@ -27,11 +27,11 @@ use transfer_contract_types::*;
 /// valid stake.
 #[derive(Debug, Default, Clone)]
 pub struct StakeState {
-    stakes: BTreeMap<[u8; PublicKey::SIZE], StakeData>,
+    stakes: BTreeMap<[u8; PublicKey::SIZE], (StakeData, PublicKey)>,
     slashed_amount: u64,
 }
 
-const STAKE_CONTRACT_VERSION: u64 = 1;
+const STAKE_CONTRACT_VERSION: u64 = 2;
 
 impl StakeState {
     pub const fn new() -> Self {
@@ -158,17 +158,18 @@ impl StakeState {
 
     /// Gets a reference to a stake.
     pub fn get_stake(&self, key: &PublicKey) -> Option<&StakeData> {
-        self.stakes.get(&key.to_bytes())
+        self.stakes.get(&key.to_bytes()).map(|(s, _)| s)
     }
 
     /// Gets a mutable reference to a stake.
     pub fn get_stake_mut(&mut self, key: &PublicKey) -> Option<&mut StakeData> {
-        self.stakes.get_mut(&key.to_bytes())
+        self.stakes.get_mut(&key.to_bytes()).map(|(s, _)| s)
     }
 
     /// Pushes the given `stake` onto the state for a given `public_key`.
     pub fn insert_stake(&mut self, public_key: PublicKey, stake: StakeData) {
-        self.stakes.insert(public_key.to_bytes(), stake);
+        self.stakes
+            .insert(public_key.to_bytes(), (stake, public_key));
     }
 
     /// Gets a mutable reference to the stake of a given key. If said stake
@@ -182,11 +183,11 @@ impl StakeState {
 
         if is_missing {
             let stake = StakeData::default();
-            self.stakes.insert(pk.to_bytes(), stake);
+            self.stakes.insert(pk.to_bytes(), (stake, *pk));
         }
 
         // SAFETY: unwrap is ok since we're sure we inserted an element
-        self.stakes.get_mut(&pk.to_bytes()).unwrap()
+        self.stakes.get_mut(&pk.to_bytes()).map(|(s, _)| s).unwrap()
     }
 
     /// Rewards a `public_key` with the given `value`. If a stake does not exist
@@ -266,10 +267,8 @@ impl StakeState {
 
     /// Feeds the host with the stakes.
     pub fn stakes(&self) {
-        for (k, v) in self.stakes.iter() {
-            let pk = PublicKey::from_bytes(k).unwrap();
-            let stake_data = v.clone();
-            rusk_abi::feed((pk, stake_data));
+        for (stake_data, pk) in self.stakes.values() {
+            rusk_abi::feed((*pk, stake_data.clone()));
         }
     }
 }

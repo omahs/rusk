@@ -44,7 +44,9 @@ fn instantiate(vm: &VM) -> Session {
     session
         .deploy(
             transfer_bytecode,
-            ContractData::builder(OWNER).contract_id(TRANSFER_CONTRACT),
+            ContractData::builder()
+                .owner(OWNER)
+                .contract_id(TRANSFER_CONTRACT),
             POINT_LIMIT,
         )
         .expect("Deploying the transfer contract should succeed");
@@ -52,7 +54,9 @@ fn instantiate(vm: &VM) -> Session {
     session
         .deploy(
             stake_bytecode,
-            ContractData::builder(OWNER).contract_id(STAKE_CONTRACT),
+            ContractData::builder()
+                .owner(OWNER)
+                .contract_id(STAKE_CONTRACT),
             POINT_LIMIT,
         )
         .expect("Deploying the stake contract should succeed");
