@@ -76,7 +76,7 @@ impl StakeState {
 
         rusk_abi::emit(
             "stake",
-            StakeEvent {
+            StakingEvent {
                 public_key: stake.public_key,
                 value: stake.value,
             },
