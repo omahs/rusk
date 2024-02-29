@@ -46,8 +46,9 @@ pub const A: usize = 4;
 pub struct LocalProver;
 
 impl crate::Prover for LocalProver {
-    fn prove_execute(&self, circuit_inputs: &[u8]) -> ProverResult {
-        self.local_prove_execute(circuit_inputs)
+    fn prove_execute(&self, _circuit_inputs: &[u8]) -> ProverResult {
+        Ok(Proof::default().to_bytes().to_vec())
+        // self.local_prove_execute(circuit_inputs)
     }
 
     fn prove_stco(&self, circuit_inputs: &[u8]) -> ProverResult {

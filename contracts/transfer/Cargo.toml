@@ -20,7 +20,7 @@ transfer-contract-types = { version = "0.1.0", path = "../transfer-types", defau
 
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-rusk-abi = { version = "0.12.0-rc", path = "../../rusk-abi" }
+rusk-abi = { version = "0.12.0-rc", path = "../../rusk-abi", features = ["debug"] }
 
 [dev-dependencies]
 rusk-profile = { version = "0.6", path = "../../rusk-profile" }

@@ -19,7 +19,7 @@ use dusk_pki::{Ownable, PublicKey, StealthAddress};
 use phoenix_core::transaction::*;
 use phoenix_core::{Crossover, Fee, Message, Note};
 use poseidon_merkle::Opening as PoseidonOpening;
-use rusk_abi::{ContractError, ContractId, PublicInput, STAKE_CONTRACT};
+use rusk_abi::{debug, ContractError, ContractId, PublicInput, STAKE_CONTRACT};
 use transfer_contract_types::{Mint, Stct, Wfco, WfcoRaw, Wfct, Wfctc};
 
 /// Arity of the transfer tree.
@@ -325,11 +325,10 @@ impl TransferState {
         let mut result = Ok(Vec::new());
 
         if let Some((contract_id, fn_name, fn_args)) = tx.call {
-            result = rusk_abi::call_raw(
-                ContractId::from_bytes(contract_id),
-                &fn_name,
-                &fn_args,
-            );
+            let contract_id = ContractId::from_bytes(contract_id);
+            debug!("Call       : {contract_id}");
+            result = rusk_abi::call_raw(contract_id, &fn_name, &fn_args);
+            debug!("Call result: {result:?}");
         }
 
         result

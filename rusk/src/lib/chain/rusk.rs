@@ -133,7 +133,8 @@ impl Rusk {
                         err: receipt.data.err().map(|e| format!("{e}")),
                     });
                 }
-                Err(_) => {
+                Err(err) => {
+                    println!("CALL ERROR    {err}");
                     // An unspendable transaction should be discarded
                     discarded_txs.push(unspent_tx);
                     continue;
