@@ -73,6 +73,14 @@ impl StakeState {
 
         let _: bool = rusk_abi::call(transfer_module, "stct", &stct)
             .expect("Sending note to contract should succeed");
+
+        rusk_abi::emit(
+            "stake",
+            StakeEvent {
+                public_key: stake.public_key,
+                value: stake.value,
+            },
+        );
     }
 
     pub fn unstake(&mut self, unstake: Unstake) {
@@ -107,6 +115,14 @@ impl StakeState {
             },
         )
         .expect("Withdrawing note from contract should be successful");
+
+        rusk_abi::emit(
+            "unstake",
+            StakingEvent {
+                public_key: unstake.public_key,
+                value,
+            },
+        );
     }
 
     pub fn withdraw(&mut self, withdraw: Withdraw) {
@@ -154,6 +170,14 @@ impl StakeState {
             },
         )
         .expect("Minting a reward note should succeed");
+
+        rusk_abi::emit(
+            "withdraw",
+            StakingEvent {
+                public_key: withdraw.public_key,
+                value: reward,
+            },
+        );
     }
 
     /// Gets a reference to a stake.
@@ -195,6 +219,13 @@ impl StakeState {
     pub fn reward(&mut self, public_key: &PublicKey, value: u64) {
         let stake = self.load_or_create_stake_mut(public_key);
         stake.increase_reward(value);
+        rusk_abi::emit(
+            "reward",
+            StakingEvent {
+                public_key: *public_key,
+                value,
+            },
+        );
     }
 
     /// Total amount slashed from the genesis
@@ -230,6 +261,14 @@ impl StakeState {
 
         // Update the total slashed amount
         self.slashed_amount += to_slash;
+
+        rusk_abi::emit(
+            "slash",
+            StakingEvent {
+                public_key: *public_key,
+                value: to_slash,
+            },
+        );
     }
 
     /// Slash the given `to_slash` amount from a `public_key` stake
@@ -262,6 +301,14 @@ impl StakeState {
 
             // Update the total slashed amount
             self.slashed_amount += to_slash;
+
+            rusk_abi::emit(
+                "hard_slash",
+                StakingEvent {
+                    public_key: *public_key,
+                    value: to_slash,
+                },
+            );
         }
     }
 
