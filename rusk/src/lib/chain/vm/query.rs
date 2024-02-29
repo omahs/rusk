@@ -17,6 +17,7 @@ use rusk_abi::{ContractId, StandardBufSerializer};
 impl Rusk {
     pub fn query_raw<S, V>(
         &self,
+        base_commit: [u8; 32],
         contract_id: ContractId,
         fn_name: S,
         fn_arg: V,
@@ -25,12 +26,9 @@ impl Rusk {
         S: AsRef<str>,
         V: Into<Vec<u8>>,
     {
-        let inner = self.inner.lock();
-
         // For queries we set a point limit of effectively infinite and a block
         // height of zero since this doesn't affect the result.
-        let current_commit = inner.current_commit;
-        let mut session = rusk_abi::new_session(&inner.vm, current_commit, 0)?;
+        let mut session = rusk_abi::new_session(&self.0, base_commit, 0)?;
 
         session
             .call_raw(contract_id, fn_name.as_ref(), fn_arg, u64::MAX)
@@ -40,6 +38,7 @@ impl Rusk {
 
     pub(crate) fn query<A, R>(
         &self,
+        base_commit: [u8; 32],
         contract_id: ContractId,
         call_name: &str,
         call_arg: &A,
@@ -52,7 +51,7 @@ impl Rusk {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let mut results = Vec::with_capacity(1);
-        self.query_seq(contract_id, call_name, call_arg, |r| {
+        self.query_seq(base_commit, contract_id, call_name, call_arg, |r| {
             results.push(r);
             None
         })?;
@@ -61,6 +60,7 @@ impl Rusk {
 
     fn query_seq<A, R, F>(
         &self,
+        base_commit: [u8; 32],
         contract_id: ContractId,
         call_name: &str,
         call_arg: &A,
@@ -74,12 +74,9 @@ impl Rusk {
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let inner = self.inner.lock();
-
         // For queries we set a point limit of effectively infinite and a block
         // height of zero since this doesn't affect the result.
-        let current_commit = inner.current_commit;
-        let mut session = rusk_abi::new_session(&inner.vm, current_commit, 0)?;
+        let mut session = rusk_abi::new_session(&self.0, base_commit, 0)?;
 
         let mut result = session
             .call(contract_id, call_name, call_arg, u64::MAX)?
@@ -98,22 +95,19 @@ impl Rusk {
 
     pub fn feeder_query<A>(
         &self,
+        base_commit: [u8; 32],
         contract_id: ContractId,
         call_name: &str,
         call_arg: &A,
         feeder: mpsc::Sender<Vec<u8>>,
-        base_commit: Option<[u8; 32]>,
     ) -> Result<()>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
         A::Archived: for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
     {
-        let inner = self.inner.lock();
-
         // For queries we set a point limit of effectively infinite and a block
         // height of zero since this doesn't affect the result.
-        let current_commit = base_commit.unwrap_or(inner.current_commit);
-        let mut session = rusk_abi::new_session(&inner.vm, current_commit, 0)?;
+        let mut session = rusk_abi::new_session(&self.0, base_commit, 0)?;
 
         session.feeder_call::<_, ()>(
             contract_id,
@@ -127,6 +121,7 @@ impl Rusk {
 
     pub fn feeder_query_raw<S, V>(
         &self,
+        base_commit: [u8; 32],
         contract_id: ContractId,
         call_name: S,
         call_arg: V,
@@ -136,12 +131,9 @@ impl Rusk {
         S: AsRef<str>,
         V: Into<Vec<u8>>,
     {
-        let inner = self.inner.lock();
-
         // For queries we set a point limit of effectively infinite and a block
         // height of zero since this doesn't affect the result.
-        let current_commit = inner.current_commit;
-        let mut session = rusk_abi::new_session(&inner.vm, current_commit, 0)?;
+        let mut session = rusk_abi::new_session(&self.0, base_commit, 0)?;
 
         session.feeder_call_raw(
             contract_id,

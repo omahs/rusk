@@ -253,7 +253,18 @@ impl<N: Network, DB: database::DB, VM: vm::VMExecution> ChainSrv<N, DB, VM> {
             None => {
                 // Lack of register record means the loaded database is
                 // either malformed or empty.
-                let state = vm.read().await.get_state_root()?;
+                // Therefore we generate a new genesis block and persist it,
+                // assuming that the only commit present in the state is the
+                // genesis commit.
+
+                let commits = vm.read().await.commits();
+                if commits.len() != 1 {
+                    return Err(anyhow::anyhow!(
+                        "Expected exactly one commit in the state"
+                    ));
+                }
+                let state = commits.into_iter().next().unwrap();
+
                 let genesis_blk = genesis::generate_state(state);
                 db.write().await.update(|t| {
                     // Persist genesis block

@@ -145,20 +145,17 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
             task: RwLock::new(Task::new_with_keys(keys_path.to_string())?),
         };
 
-        // NB. After restart, state_root returned by VM is always the last
-        // finalized one.
-        let state_root = vm.read().await.get_state_root()?;
+        let commits = vm.read().await.commits();
 
-        info!(
-            event = "VM state loaded",
-            state_root = hex::encode(state_root),
-        );
-
-        // Detect a consistency issue between VM and Ledger states.
-        if mrb_height > 0 && mrb_state_hash != state_root {
+        if mrb_height > 0 && !commits.contains(&mrb_state_hash) {
             info!("revert to last finalized state");
             // Revert to last known finalized state.
             acc.try_revert(RevertTarget::LastFinalizedState).await?;
+        } else {
+            info!(
+                event = "Last finalized state present",
+                state_root = hex::encode(mrb_state_hash),
+            );
         }
 
         Ok(acc)

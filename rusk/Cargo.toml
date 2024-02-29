@@ -17,9 +17,9 @@ tokio = { version = "1.15", features = ["rt-multi-thread", "fs", "macros"] }
 futures-util = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.0", features = [
-  "fmt",
-  "env-filter",
-  "json",
+    "fmt",
+    "env-filter",
+    "json",
 ] }
 clap = { version = "=4.4", features = ["env", "string", "derive"] }
 semver = "1.0"
@@ -32,7 +32,6 @@ serde_json = "1"
 serde_with = { version = "3.1", features = ["hex"] }
 bs58 = "0.4"
 hex = "0.4"
-parking_lot = "0.12"
 rkyv = { version = "0.7", default-features = false, features = ["size_32"] }
 bytecheck = { version = "0.6", default-features = false }
 dirs = "4"
@@ -80,7 +79,7 @@ async-graphql = "5.0"
 
 ## Ephemeral dependencies
 tempfile = { version = "3.2", optional = true }
-rusk-recovery = { version = "0.6", path = "../rusk-recovery", optional = true}
+rusk-recovery = { version = "0.6", path = "../rusk-recovery", optional = true }
 
 ## testwallet dependencies
 futures = { version = "0.3", optional = true }

@@ -20,6 +20,7 @@ use super::{Rusk, MINIMUM_STAKE};
 impl VMExecution for Rusk {
     fn execute_state_transition<I: Iterator<Item = Transaction>>(
         &self,
+        base_commit: [u8; 32],
         params: &CallParams,
         txs: I,
     ) -> anyhow::Result<(
@@ -31,6 +32,7 @@ impl VMExecution for Rusk {
 
         let (txs, discarded_txs, verification_output) = self
             .execute_transactions(
+                base_commit,
                 params.round,
                 params.block_gas_limit,
                 params.generator_pubkey.inner(),
@@ -46,6 +48,7 @@ impl VMExecution for Rusk {
 
     fn verify_state_transition(
         &self,
+        base_commit: [u8; 32],
         blk: &Block,
     ) -> anyhow::Result<VerificationOutput> {
         info!("Received verify_state_transition request");
@@ -56,6 +59,7 @@ impl VMExecution for Rusk {
 
         let (_, verification_output) = self
             .verify_transactions(
+                base_commit,
                 blk.header().height,
                 blk.header().gas_limit,
                 &generator,
@@ -69,6 +73,7 @@ impl VMExecution for Rusk {
 
     fn accept(
         &self,
+        base_commit: [u8; 32],
         blk: &Block,
     ) -> anyhow::Result<(Vec<SpentTransaction>, VerificationOutput)> {
         info!("Received accept request");
@@ -79,6 +84,7 @@ impl VMExecution for Rusk {
 
         let (txs, verification_output) = self
             .accept_transactions(
+                base_commit,
                 blk.header().height,
                 blk.header().gas_limit,
                 generator,
@@ -96,6 +102,7 @@ impl VMExecution for Rusk {
 
     fn finalize(
         &self,
+        base_commit: [u8; 32],
         blk: &Block,
     ) -> anyhow::Result<(Vec<SpentTransaction>, VerificationOutput)> {
         info!("Received finalize request");
@@ -106,6 +113,7 @@ impl VMExecution for Rusk {
 
         let (txs, state_root) = self
             .finalize_transactions(
+                base_commit,
                 blk.header().height,
                 blk.header().gas_limit,
                 generator,
@@ -123,11 +131,19 @@ impl VMExecution for Rusk {
         Ok((txs, state_root))
     }
 
-    fn preverify(&self, tx: &Transaction) -> anyhow::Result<()> {
+    fn commits(&self) -> Vec<[u8; 32]> {
+        self.0.commits()
+    }
+
+    fn preverify(
+        &self,
+        base_commit: [u8; 32],
+        tx: &Transaction,
+    ) -> anyhow::Result<()> {
         info!("Received preverify request");
         let tx = &tx.inner;
         let existing_nullifiers = self
-            .existing_nullifiers(&tx.nullifiers)
+            .existing_nullifiers(base_commit, &tx.nullifiers)
             .map_err(|e| anyhow::anyhow!("Cannot check nullifiers: {e}"))?;
 
         if !existing_nullifiers.is_empty() {
@@ -145,15 +161,16 @@ impl VMExecution for Rusk {
         &self,
         base_commit: [u8; 32],
     ) -> anyhow::Result<Provisioners> {
-        self.query_provisioners(Some(base_commit))
+        self.query_provisioners(base_commit)
     }
 
     fn get_provisioner(
         &self,
+        base_commit: [u8; 32],
         pk: &dusk_bls12_381_sign::PublicKey,
     ) -> anyhow::Result<Option<Stake>> {
         let stake = self
-            .provisioner(pk)
+            .provisioner(base_commit, pk)
             .map_err(|e| anyhow::anyhow!("Cannot get provisioner {e}"))?
             .and_then(|stake| {
                 stake.amount.map(|(value, eligibility)| {
@@ -162,36 +179,12 @@ impl VMExecution for Rusk {
             });
         Ok(stake)
     }
-
-    fn get_state_root(&self) -> anyhow::Result<[u8; 32]> {
-        Ok(self.state_root())
-    }
-
-    fn get_finalized_state_root(&self) -> anyhow::Result<[u8; 32]> {
-        Ok(self.base_root())
-    }
-
-    fn revert(&self, state_hash: [u8; 32]) -> anyhow::Result<[u8; 32]> {
-        let state_hash = self
-            .revert(state_hash)
-            .map_err(|inner| anyhow::anyhow!("Cannot revert: {inner}"))?;
-
-        Ok(state_hash)
-    }
-
-    fn revert_to_finalized(&self) -> anyhow::Result<[u8; 32]> {
-        let state_hash = self.revert_to_base_root().map_err(|inner| {
-            anyhow::anyhow!("Cannot revert to finalized: {inner}")
-        })?;
-
-        Ok(state_hash)
-    }
 }
 
 impl Rusk {
     fn query_provisioners(
         &self,
-        base_commit: Option<[u8; 32]>,
+        base_commit: [u8; 32],
     ) -> anyhow::Result<Provisioners> {
         info!("Received get_provisioners request");
         let provisioners = self

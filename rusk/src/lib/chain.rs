@@ -7,10 +7,7 @@
 mod rusk;
 mod vm;
 
-use std::path::PathBuf;
 use std::sync::Arc;
-
-use parking_lot::Mutex;
 
 use node::database::rocksdb::Backend;
 use node::network::Kadcast;
@@ -19,17 +16,8 @@ use rusk_abi::VM;
 
 pub const MINIMUM_STAKE: Dusk = dusk(1000.0);
 
-pub struct RuskInner {
-    pub current_commit: [u8; 32],
-    pub base_commit: [u8; 32],
-    pub vm: VM,
-}
-
 #[derive(Clone)]
-pub struct Rusk {
-    inner: Arc<Mutex<RuskInner>>,
-    dir: PathBuf,
-}
+pub struct Rusk(Arc<VM>);
 
 #[derive(Clone)]
 pub struct RuskNode(pub node::Node<Kadcast<255>, Backend, Rusk>);

@@ -8,7 +8,6 @@ use std::path::Path;
 use std::sync::{mpsc, Arc, LazyLock};
 use std::{fs, io};
 
-use parking_lot::{Mutex, MutexGuard};
 use sha3::{Digest, Sha3_256};
 
 use dusk_bls12_381::BlsScalar;
@@ -25,7 +24,7 @@ use rusk_abi::{
 };
 use rusk_profile::to_rusk_state_id_path;
 
-use super::{coinbase_value, emission_amount, Rusk, RuskInner};
+use super::{coinbase_value, emission_amount, Rusk};
 use crate::{Error, Result};
 
 pub static DUSK_KEY: LazyLock<BlsPublicKey> = LazyLock::new(|| {
@@ -55,20 +54,12 @@ impl Rusk {
 
         let vm = rusk_abi::new_vm(dir)?;
 
-        let inner = Arc::new(Mutex::new(RuskInner {
-            current_commit: base_commit,
-            base_commit,
-            vm,
-        }));
-
-        Ok(Self {
-            inner,
-            dir: dir.into(),
-        })
+        Ok(Rusk(Arc::new(vm)))
     }
 
     pub fn execute_transactions<I: Iterator<Item = Transaction>>(
         &self,
+        base_commit: [u8; 32],
         block_height: u64,
         block_gas_limit: u64,
         generator: &BlsPublicKey,
@@ -76,11 +67,8 @@ impl Rusk {
         missed_generators: &[BlsPublicKey],
     ) -> Result<(Vec<SpentTransaction>, Vec<Transaction>, VerificationOutput)>
     {
-        let inner = self.inner.lock();
-
-        let current_commit = inner.current_commit;
         let mut session =
-            rusk_abi::new_session(&inner.vm, current_commit, block_height)?;
+            rusk_abi::new_session(&self.0, base_commit, block_height)?;
 
         let mut block_gas_left = block_gas_limit;
 
@@ -102,8 +90,8 @@ impl Rusk {
                     // transaction, since it is technically valid.
                     if gas_spent > block_gas_left {
                         session = rusk_abi::new_session(
-                            &inner.vm,
-                            current_commit,
+                            &self.0,
+                            base_commit,
                             block_height,
                         )?;
 
@@ -165,17 +153,15 @@ impl Rusk {
     /// Verify the given transactions are ok.
     pub fn verify_transactions(
         &self,
+        base_commit: [u8; 32],
         block_height: u64,
         block_gas_limit: u64,
         generator: &BlsPublicKey,
         txs: &[Transaction],
         missed_generators: &[BlsPublicKey],
     ) -> Result<(Vec<SpentTransaction>, VerificationOutput)> {
-        let inner = self.inner.lock();
-
-        let current_commit = inner.current_commit;
         let mut session =
-            rusk_abi::new_session(&inner.vm, current_commit, block_height)?;
+            rusk_abi::new_session(&self.0, base_commit, block_height)?;
 
         accept(
             &mut session,
@@ -194,6 +180,7 @@ impl Rusk {
     ///   value disables the check.
     pub fn accept_transactions(
         &self,
+        base_commit: [u8; 32],
         block_height: u64,
         block_gas_limit: u64,
         generator: BlsPublicKey,
@@ -201,11 +188,8 @@ impl Rusk {
         consistency_check: Option<VerificationOutput>,
         missed_generators: &[BlsPublicKey],
     ) -> Result<(Vec<SpentTransaction>, VerificationOutput)> {
-        let mut inner = self.inner.lock();
-
-        let current_commit = inner.current_commit;
         let mut session =
-            rusk_abi::new_session(&inner.vm, current_commit, block_height)?;
+            rusk_abi::new_session(&self.0, base_commit, block_height)?;
 
         let (spent_txs, verification_output) = accept(
             &mut session,
@@ -224,8 +208,7 @@ impl Rusk {
             }
         }
 
-        let commit_id = session.commit()?;
-        inner.current_commit = commit_id;
+        session.commit()?;
 
         Ok((spent_txs, verification_output))
     }
@@ -237,6 +220,7 @@ impl Rusk {
     ///   disables the check.
     pub fn finalize_transactions(
         &self,
+        base_commit: [u8; 32],
         block_height: u64,
         block_gas_limit: u64,
         generator: BlsPublicKey,
@@ -244,11 +228,8 @@ impl Rusk {
         consistency_check: Option<VerificationOutput>,
         missed_generators: &[BlsPublicKey],
     ) -> Result<(Vec<SpentTransaction>, VerificationOutput)> {
-        let mut inner = self.inner.lock();
-
-        let current_commit = inner.current_commit;
         let mut session =
-            rusk_abi::new_session(&inner.vm, current_commit, block_height)?;
+            rusk_abi::new_session(&self.0, base_commit, block_height)?;
 
         let (spent_txs, verification_output) = accept(
             &mut session,
@@ -267,81 +248,34 @@ impl Rusk {
             }
         }
 
-        let commit_id = session.commit()?;
-        inner.current_commit = commit_id;
-
-        // Delete all commits except the previous base commit, and the current
-        // commit
-        let mut delete_commits = inner.vm.commits();
-        delete_commits.retain(|c| {
-            c != &inner.current_commit
-                && c != &inner.base_commit
-                && c != &current_commit
-        });
-        for commit in delete_commits {
-            inner.vm.delete_commit(commit)?;
-        }
-
-        let commit_id_path = to_rusk_state_id_path(&self.dir);
-        fs::write(commit_id_path, commit_id)?;
-
-        inner.base_commit = commit_id;
+        // TODO We should delete some commits at some point
+        session.commit()?;
 
         Ok((spent_txs, verification_output))
-    }
-
-    pub fn revert(&self, state_hash: [u8; 32]) -> Result<[u8; 32]> {
-        let mut inner = self.inner.lock();
-
-        let commits = &inner.vm.commits();
-        if !commits.contains(&state_hash) {
-            return Err(Error::CommitNotFound(state_hash));
-        }
-
-        inner.current_commit = state_hash;
-        Ok(inner.current_commit)
-    }
-
-    pub fn revert_to_base_root(&self) -> Result<[u8; 32]> {
-        self.revert(self.base_root())
-    }
-
-    /// Perform an action with the underlying data structure.
-    pub fn with_inner<'a, F, T>(&'a self, closure: F) -> T
-    where
-        F: FnOnce(MutexGuard<'a, RuskInner>) -> T,
-    {
-        let inner = self.inner.lock();
-        closure(inner)
-    }
-
-    /// Get the base root.
-    pub fn base_root(&self) -> [u8; 32] {
-        let inner = self.inner.lock();
-        inner.base_commit
-    }
-
-    /// Get the current state root.
-    pub fn state_root(&self) -> [u8; 32] {
-        let inner = self.inner.lock();
-        inner.current_commit
     }
 
     /// Returns the nullifiers that already exist from a list of given
     /// `nullifiers`.
     pub fn existing_nullifiers(
         &self,
+        base_commit: [u8; 32],
         nullifiers: &Vec<BlsScalar>,
     ) -> Result<Vec<BlsScalar>> {
-        self.query(TRANSFER_CONTRACT, "existing_nullifiers", nullifiers)
+        self.query(
+            base_commit,
+            TRANSFER_CONTRACT,
+            "existing_nullifiers",
+            nullifiers,
+        )
     }
+
     /// Returns the stakes.
     pub fn provisioners(
         &self,
-        base_commit: Option<[u8; 32]>,
+        base_commit: [u8; 32],
     ) -> Result<impl Iterator<Item = (BlsPublicKey, StakeData)>> {
         let (sender, receiver) = mpsc::channel();
-        self.feeder_query(STAKE_CONTRACT, "stakes", &(), sender, base_commit)?;
+        self.feeder_query(base_commit, STAKE_CONTRACT, "stakes", &(), sender)?;
         Ok(receiver.into_iter().map(|bytes| {
             rkyv::from_bytes::<(BlsPublicKey, StakeData)>(&bytes).expect(
                 "The contract should only return (pk, stake_data) tuples",
@@ -349,8 +283,12 @@ impl Rusk {
         }))
     }
 
-    pub fn provisioner(&self, pk: &BlsPublicKey) -> Result<Option<StakeData>> {
-        self.query(STAKE_CONTRACT, "get_stake", pk)
+    pub fn provisioner(
+        &self,
+        base_commit: [u8; 32],
+        pk: &BlsPublicKey,
+    ) -> Result<Option<StakeData>> {
+        self.query(base_commit, STAKE_CONTRACT, "get_stake", pk)
     }
 }
 
