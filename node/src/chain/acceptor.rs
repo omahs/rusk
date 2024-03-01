@@ -195,6 +195,7 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
     }
 
     fn selective_update(
+        base_commit: [u8; 32],
         blk: &Block,
         txs: &[SpentTransaction],
         vm: &tokio::sync::RwLockWriteGuard<'_, VM>,
@@ -214,7 +215,7 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
                 info!(event = "provisioner_update", src, ?change);
                 let pk = change.into_public_key();
                 let prov = pk.to_bs58();
-                match vm.get_provisioner(pk.inner())? {
+                match vm.get_provisioner(base_commit, pk.inner())? {
                     Some(stake) if stake.value() >= MINIMUM_STAKE => {
                         debug!(event = "new_stake", src, prov, ?stake);
                         let replaced = new_prov.replace_stake(pk, stake);
@@ -432,12 +433,14 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
         let start = std::time::Instant::now();
         // Persist block in consistency with the VM state update
         {
+            let base_commit = mrb.inner().header().state_hash;
+
             let vm = self.vm.write().await;
             let txs = self.db.read().await.update(|t| {
                 let (txs, verification_output) = if blk.is_final() {
-                    vm.finalize(blk.inner())?
+                    vm.finalize(base_commit, blk.inner())?
                 } else {
-                    vm.accept(blk.inner())?
+                    vm.accept(base_commit, blk.inner())?
                 };
 
                 assert_eq!(header.state_hash, verification_output.state_root);
@@ -470,6 +473,7 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
             }
 
             let selective_update = Self::selective_update(
+                base_commit,
                 blk.inner(),
                 &txs,
                 &vm,
@@ -541,94 +545,89 @@ impl<DB: database::DB, VM: vm::VMExecution, N: Network> Acceptor<N, DB, VM> {
     ///
     /// This incorporates both VM state revert and Ledger state revert.
     pub async fn try_revert(&self, target: RevertTarget) -> Result<()> {
-        let curr_height = self.get_curr_height().await;
+        async fn revert_chain_until<N, DB, VM, F: Fn(&Block, &Label) -> bool>(
+            this: &Acceptor<N, DB, VM>,
+            is_target_block: F,
+        ) -> Result<(Block, Label)>
+        where
+            DB: database::DB,
+            VM: vm::VMExecution,
+            N: Network,
+        {
+            let curr_height = this.get_curr_height().await;
 
-        let target_state_hash = match target {
-            RevertTarget::LastFinalizedState => {
-                let vm = self.vm.read().await;
-                let state_hash = vm.revert_to_finalized()?;
+            this.db.read().await.update(move |t| {
+                let mut height = curr_height;
 
-                info!(
-                    event = "vm reverted",
-                    state_root = hex::encode(state_hash),
-                    is_final = "true",
-                );
+                while height > 0 {
+                    let block = t
+                        .fetch_block_by_height(height)
+                        .unwrap()
+                        .ok_or(anyhow!("could not fetch block"))?;
+                    let label = t
+                        .fetch_block_label_by_height(height)
+                        .unwrap()
+                        .ok_or(anyhow!("could not fetch block label"))?;
 
-                anyhow::Ok(state_hash)
-            }
-            RevertTarget::Commit(state_hash) => {
-                let vm = self.vm.read().await;
-                let state_hash = vm.revert(state_hash)?;
-                let is_final = vm.get_finalized_state_root()? == state_hash;
+                    // If it is the target block we simply return it
+                    if is_target_block(&block, &label) {
+                        return Ok((block, label));
+                    }
 
-                info!(
-                    event = "vm reverted",
-                    state_root = hex::encode(state_hash),
-                    is_final,
-                );
+                    // Delete any rocksdb record related to this block
+                    t.delete_block(&block)?;
 
-                anyhow::Ok(state_hash)
-            }
-            RevertTarget::LastEpoch => unimplemented!(),
-        }?;
+                    // Attempt to resubmit transactions back to mempool.
+                    // An error here is not considered critical.
+                    for tx in block.txs() {
+                        if let Err(e) = Mempool::add_tx(t, tx) {
+                            warn!("failed to resubmit transactions: {e}")
+                        };
+                    }
 
-        // Delete any block until we reach the target_state_hash, the
-        // VM was reverted to.
+                    let header = block.header();
 
-        // The blockchain tip (most recent block) after reverting
-        let (blk, label) = self.db.read().await.update(|t| {
-            let mut height = curr_height;
-            while height != 0 {
-                let b = Ledger::fetch_block_by_height(t, height)?
-                    .ok_or_else(|| anyhow::anyhow!("could not fetch block"))?;
-                let h = b.header();
-                let label =
-                    t.fetch_block_label_by_height(h.height)?.ok_or_else(
-                        || anyhow::anyhow!("could not fetch block label"),
-                    )?;
+                    info!(
+                        event = "block deleted",
+                        height = header.height,
+                        iter = header.iteration,
+                        label = ?label,
+                        hash = hex::encode(header.hash)
+                    );
 
-                if h.state_hash == target_state_hash {
-                    return Ok((b, label));
+                    height -= 1;
                 }
 
-                info!(
-                    event = "block deleted",
-                    height = h.height,
-                    iter = h.iteration,
-                    label = ?label,
-                    hash = hex::encode(h.hash)
-                );
+                Err(anyhow::format_err!("target block not found"))
+            })
+        }
 
-                // Delete any rocksdb record related to this block
-                t.delete_block(&b)?;
-
-                // Attempt to resubmit transactions back to mempool.
-                // An error here is not considered critical.
-                for tx in b.txs().iter() {
-                    if let Err(e) = Mempool::add_tx(t, tx) {
-                        warn!("failed to resubmit transactions: {e}")
-                    };
+        let (block, label) =
+            revert_chain_until(self, |block, label| match target {
+                RevertTarget::LastFinalizedState => *label == Label::Final,
+                RevertTarget::Commit(state_hash) => {
+                    block.header().state_hash == state_hash
                 }
+                RevertTarget::LastEpoch => unimplemented!(),
+            })
+            .await?;
 
-                height -= 1;
-            }
+        let state_hash = block.header().state_hash;
+        let vm = self.vm.read().await;
 
-            Err(anyhow!("not found"))
-        })?;
-
-        if blk.header().state_hash != target_state_hash {
-            return Err(anyhow!("Failed to revert to proper state"));
+        if !vm.commits().contains(&state_hash) {
+            return Err(anyhow!("state hash not found in VM commits"));
         }
 
         // Update blockchain tip to be the one we reverted to.
         info!(
             event = "updating blockchain tip",
-            height = blk.header().height,
-            iter = blk.header().iteration,
-            state_root = hex::encode(blk.header().state_hash)
+            height = block.header().height,
+            iter = block.header().iteration,
+            state_root = hex::encode(block.header().state_hash)
         );
 
-        self.update_most_recent_block(&blk, label).await
+        self.update_most_recent_block(&block, label).await
     }
 
     /// Spawns consensus algorithm after aborting currently running one
